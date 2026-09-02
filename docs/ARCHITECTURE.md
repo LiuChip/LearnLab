@@ -1,6 +1,6 @@
 # 架构设计
 
-> 相关文档：[插件加载与 API 设计](superpowers/specs/2026-09-01-plugin-loading-and-scoped-permissions-design.md) · [总览](OVERVIEW.md) · [UI 设计](UI_DESIGN.md) · [安全机制](SECURITY.md) · [路线图](ROADMAP.md) · [数据模型](DATA_MODEL.md) · [测试策略](TEST_STRATEGY.md)
+> 相关文档：[插件加载与 API 设计](superpowers/specs/2026-09-01-plugin-loading-and-scoped-permissions-design.md) · [总览](OVERVIEW.md) · [UI 设计](UI_DESIGN.md) · [安全机制](SECURITY.md) · [路线图](ROADMAP.md) · [数据模型](DATA_MODEL.md) · [测试策略](TEST_STRATEGY.md) · [依赖仓库与独立运行时](superpowers/specs/2026-09-02-dependency-repository-and-managed-runtimes-design.md)
 >
 > 2026-09-01 更新：确认插件优先架构、有限作用域、独立插件宿主、执行监督、分层存储和按依赖链加载插件
 
@@ -24,11 +24,9 @@ LearnLab 是**实验包播放器**。实验包 = 一个 ZIP 文件（`.labpkg`�
 │   │   ├── video-1.mp4
 │   │   └── lab-1.yaml
 │   └── ...
-├── dependencies/              # 依赖声明文件（可选，不是学习区的安装目录）
-│   ├── requirements.txt       # Python 依赖
-│   └── packages.txt           # 系统级依赖（apt/brew 等）
-└── env/                       # 环境配置脚本（可选）
-    └── setup.sh               # 初始化脚本（用户同意后执行）
+├── bundled-dependencies/      # 可选：小众独立运行时的随包分发来源
+│   └── <dependency-id>/       # 导入后统一归档到学习区 dependencies/
+└── external-prerequisites.yaml# 可选：需要用户自行安装的软件声明
 ```
 
 用户双击 `.labpkg` 导入 → 解压到学习区 → 实验包出现在左侧目录树 → 开始学习。
@@ -45,7 +43,9 @@ LearnLab 是**实验包播放器**。实验包 = 一个 ZIP 文件（`.labpkg`�
 - `license`：内容和代码的许可证；
 - `experiment_count`：作者声明的实验数量，用于展示和包级统计；
 - `required_plugins`：当前实验包直接依赖的插件；
-- `runtime_dependencies`：当前实验包需要的环境依赖，实际安装由学习区管理。
+- `runtime_dependencies`：当前实验包需要的 LearnLab 管理运行时；常规依赖从依赖源获取，小众依赖可以随包提供，最终统一进入学习区 `dependencies/`；
+- `external_prerequisites`：需要用户或插件处理的系统级软件，不由核心自动安装；
+- `bundled-dependencies/`：可选的小众独立运行时分发目录，只是导入来源，不是最终运行目录。
 
 这些字段用于导入前展示和用户自行判断质量，不代表 LearnLab 的官方背书。
 
@@ -552,9 +552,14 @@ required_plugins:
     version: ">=1.1.0 <2.0.0"
     provides: ["environment.mysql", "validator.mysql-schema"]
 runtime_dependencies:
-  - kind: mysql
+  - id: org.mysql.runtime
     version: ">=8.0"
-    platform: [macos, linux, windows]
+    provider: learnlab.mysql
+    source: repository
+external_prerequisites:
+  - id: system.docker
+    version: ">=27.0.0"
+    required: false
 ```
 
 `plugin_id`、版本、作者和签名构成插件的最小身份；不引入复杂注册中心、评级体系或企业级审核。兼容更新应尽量让旧实验包无感升级；破坏性更新必须显式标注。没有满足版本范围的插件时，包可以进入只读模式，但不能开始依赖该插件的实验。
@@ -701,7 +706,8 @@ LearnLab 是"播放器"，还需要一个"制作器"——让不会编程的人�
    ├── chapters/01-基础/
    │   ├── content.md      # 手写 Markdown
    │   └── lab-1.yaml      # 手写实验卡片定义
-   └── dependencies/       # 可选：依赖文件
+   ├── bundled-dependencies/ # 可选：小众独立运行时
+   └── external-prerequisites.yaml # 可选：系统软件声明
 
 2. 打包为 .labpkg（其实就是 ZIP）
    zip -r my-lab-package.labpkg .
@@ -936,7 +942,7 @@ LearnLab 采用“学习区数据库 + 实验包数据库”的两层模型。�
 | 每次运行的细节 | `experiment_history/` | 保存代码/命令、输出、报错、判定和产物 |
 | 用户设置和插件设置 | `~/.learnlab/config.json` | 可手动导出/导入 |
 | 用户笔记正文 | `notesDir/*.md` | Markdown 文件，元数据可在 package.db 或重建索引中保存 |
-| 学习区共享依赖 | `<workspace>/dependencies/` | 由 `DependencyManager` 按指纹复用的实际依赖 |
+| 学习区共享依赖 | `<workspace>/dependencies/` | 由 `DependencyManager` 按版本、平台、架构和内容哈希复用的实际独立运行时；仓库依赖和包内置依赖最终都归档于此 |
 
 ### 进度和移动限制
 
@@ -1012,8 +1018,17 @@ required_plugins:
     version: ">=1.1.0 <2.0.0"
     provides: ["environment.mysql", "validator.mysql-schema"]
 runtime_dependencies:
-  - kind: mysql
+  - id: org.mysql.runtime
     version: ">=8.0"
+    provider: learnlab.mysql
+    source: repository
+
+external_prerequisites:
+  - id: system.mysql
+    version: ">=8.0"
+    required: false
+    reason: "也可以连接用户已有的 MySQL"
+    detect: plugin
 ```
 
 `package_id` 是稳定身份，`name` 只是展示名称。前置依赖必须引用 `package_id`，不能只引用中文名称。

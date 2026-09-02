@@ -187,7 +187,7 @@ sql-intro/                          # 可压缩为 .labpkg
 │       └── experiment.yaml
 ├── assets/                         # 图片、视频和其他资源
 ├── notes/                          # 包内可选笔记资源
-├── dependencies/                   # 依赖声明，不是实际共享安装目录
+├── bundled-dependencies/           # 可选：小众独立运行时的分发来源
 └── .learnlab/                      # 运行后生成
     ├── package.db
     ├── experiment_history/
@@ -202,7 +202,13 @@ sql-intro/                          # 可压缩为 .labpkg
 4. 把当前实验包作用域交给获得授权的插件；
 5. 保存阅读进度和实验历史。
 
-## 6. 用户运行时目录：也不是源码目录
+## 6. 依赖来源和最终归档
+
+实验包可以只声明依赖，也可以在 `bundled-dependencies/` 中携带小众独立运行时。依赖仓库下载的运行时和实验包携带的运行时，导入后都归档到当前学习区的 `dependencies/`；这里是 LearnLab 管理运行时的唯一事实位置。
+
+需要系统级安装的软件不进入该目录，而由 `external_prerequisites` 声明并由插件检测和引导。
+
+## 7. 用户运行时目录：也不是源码目录
 
 ```text
 ~/.learnlab/
@@ -211,9 +217,9 @@ sql-intro/                          # 可压缩为 .labpkg
 └── workspaces/
     └── 学习区/
         ├── .learnlab/workspace.db   # 包清单、软连接和学习区状态
-        ├── dependencies/            # 该学习区共享的实际依赖
-        │   ├── python/<fingerprint>/
-        │   ├── mysql/<fingerprint>/
+        ├── dependencies/            # 该学习区共享的实际独立运行时
+        │   ├── org.llvm.clang/18.1.8/darwin-arm64/<sha256>/
+        │   ├── org.mysql.runtime/8.4.0/linux-x64/<sha256>/
         │   └── ...
         ├── sql-intro/               # 解压后的实验包
         │   └── .learnlab/package.db

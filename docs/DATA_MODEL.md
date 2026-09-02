@@ -1,6 +1,6 @@
 # 数据模型
 
-> 相关文档：[插件加载与 API 设计](superpowers/specs/2026-09-01-plugin-loading-and-scoped-permissions-design.md) · [架构设计](ARCHITECTURE.md) · [安全机制](SECURITY.md) · [路线图](ROADMAP.md)
+> 相关文档：[插件加载与 API 设计](superpowers/specs/2026-09-01-plugin-loading-and-scoped-permissions-design.md) · [依赖仓库与独立运行时](superpowers/specs/2026-09-02-dependency-repository-and-managed-runtimes-design.md) · [架构设计](ARCHITECTURE.md) · [安全机制](SECURITY.md) · [路线图](ROADMAP.md)
 
 ## 目标
 
@@ -22,8 +22,8 @@ LearnLab 只保留两层数据库，避免把学习区组织关系和实验包�
 | `packages` | `package_id`, `path`, `version`, `display_name` | 登记实验包目录或软连接 |
 | `links` | `link_path`, `target_path` | 记录学习区中的软连接 |
 | `workspace_settings` | `key`, `value` | 学习区级显示设置 |
-| `dependency_records` | `kind`, `fingerprint`, `path`, `status` | 记录共享依赖的实际位置和安装状态 |
-| `package_dependencies` | `package_id`, `dependency_fingerprint`, `requirement` | 记录包声明与共享依赖实例的对应关系 |
+| `dependency_records` | `dependency_id`, `version`, `platform`, `arch`, `sha256`, `path`, `source_type`, `source_package_id`, `status` | 记录共享独立运行时的实际位置、来源和准备状态 |
+| `package_dependencies` | `package_id`, `dependency_id`, `required_version`, `resolved_version`, `resolved_sha256`, `source_type`, `status` | 记录包声明与实际共享依赖实例的对应关系 |
 
 `path` 是本地位置，不作为跨设备稳定身份。实验包移动到未登记的位置时，可以被视为新安装位置，原进度不承诺保留。
 
@@ -105,6 +105,10 @@ LearnLab 只保留两层数据库，避免把学习区组织关系和实验包�
 - 包升级不得覆盖 `.learnlab/` 动态区；
 - 内容指纹变化时，只有对应章节阅读进度重置为 0%；新增且未改动的章节不影响原有章节进度；
 - `experiment_count` 由作者声明，manifest 更新时若作者声明变更则更新展示和统计；
+- `runtime_dependencies` 记录 LearnLab 管理的独立运行时需求；`external_prerequisites` 记录系统级前置软件，二者不能混为一谈；
+- 依赖仓库下载或实验包 `bundled-dependencies/` 导入后的实际文件统一写入当前学习区 `dependencies/`；
+- 依赖导入成功前不得更新为可用状态；失败不得留下半成品目录；
+- 相同依赖内容按 SHA-256 复用，不同哈希可以并存；
 - 插件设置、插件启用/全局或包级激活状态及用户授权摘要属于 `config.json`，可以随配置 JSON 导入/导出；
 - 实验包移动到未登记位置时，默认视为新安装位置，直接丢失原进度绑定，不做复杂迁移；
 - 学习区 `dependencies/` 的实际文件不写入配置 JSON，备份时随整个学习区复制。
