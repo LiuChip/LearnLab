@@ -1,5 +1,6 @@
 # Dependencies
 node_modules/
+.pnpm-store/
 
 # Build output
 dist/
@@ -9,3 +10,6 @@ out/
 *.log
 .DS_Store
 
+
+# Local development plan
+Plan.md

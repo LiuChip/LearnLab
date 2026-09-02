@@ -99,7 +99,7 @@ MVP 暂不支持：第三方动态插件、源市场、云同步、GUI LabKit、
 |:---:|:---|:---|
 | W1 | Electron + TypeScript 基础 | 窗口、开发脚本、最小 README |
 | W2 | 主进程/渲染进程通信 | 安全 preload、最小 IPC |
-| W3 | Preact 布局 | 目录树、阅读区、错误状态 |
+| W3 | VSCode Workbench UI 骨架 | Activity Bar、主侧边栏、标签页、中央阅读区、状态栏 |
 | W4 | Markdown 阅读 | 代码块、旁注、公式占位 |
 | W5 | 包格式 v0 | `manifest.yaml`、Schema 校验、目录导入 |
 | W6 | 学习区和依赖 | `workspace.db`、包列表、切换、最近打开、`dependencies/` 和独立运行时记录 |

@@ -1,0 +1,24 @@
+id: "com.example.sql-intro"
+version: "1.0.0"
+name: "SQL 基础入门"
+author: "LearnLab"
+description: "通过交互式实验学习 SQL 查询基础。"
+license: "MIT"
+
+chapters:
+  - id: "01-select"
+    title: "1. 基础查询 (SELECT)"
+    file: "01-select.md"
+  - id: "02-where"
+    title: "2. 条件过滤 (WHERE)"
+    file: "02-where.md"
+
+runtime_dependencies:
+  - id: "org.mysql"
+    version: ">=8.0.0"
+    provider: "learnlab.mysql"
+    source: "repository"
+
+required_plugins:
+  - id: "org.learnlab.mysql"
+    version: ">=1.0.0"

@@ -1,0 +1,4 @@
+.reader h1, .reader h2, .reader h3 { line-height: 1.25; }
+.reader pre { padding: 16px; overflow: auto; border-radius: 8px; background: #0f172a; color: #e2e8f0; }
+.reader code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.reader a { color: #2563eb; }

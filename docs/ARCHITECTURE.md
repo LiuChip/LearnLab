@@ -4,6 +4,46 @@
 >
 > 2026-09-01 更新：确认插件优先架构、有限作用域、独立插件宿主、执行监督、分层存储和按依赖链加载插件
 
+> 2026-09-02 更新：桌面 UI 直接采用 VSCode Workbench 对标方案；UI 由功能栏、主侧边栏、标签页、中央工作区、底部面板和状态栏组成，插件通过受控注册接口扩展视图。
+
+## 🖥️ Workbench UI 架构
+
+LearnLab 的 UI 不是普通网页式两栏布局，而是以 VSCode Workbench 为参考的可扩展桌面工作台。布局职责固定为：
+
+```text
+AppShell
+├── ActivityBar          # 一级功能切换：实验包、搜索、插件、依赖、设置
+├── PrimarySidebar       # 当前功能的树、列表和筛选
+├── EditorGroup
+│   ├── EditorTabs       # 教程、实验、笔记、日志和插件视图
+│   └── EditorArea       # 当前主要学习或实验内容
+├── BottomPanel          # 终端、输出、诊断和实验日志，按需展开
+└── StatusBar            # 进度、依赖、环境和插件状态
+```
+
+组件边界与核心业务边界分离：
+
+- `AppShell` 只负责布局和区域生命周期，不读取数据库或直接执行实验。
+- `ChapterReader` 只接收已加载的章节模型和 Markdown 渲染结果。
+- `EditorTabs`、`BottomPanel` 和 `StatusBar` 使用可测试的 UI 状态模型。
+- 插件只能通过宿主注册 API 添加视图、命令、菜单和状态项，不能直接修改宿主 DOM。
+- 主题通过 CSS 变量传递，主题插件不能任意改变布局或绕过权限。
+
+建议的 renderer 目录：
+
+```text
+apps/desktop/src/renderer/
+├── components/shell/      # AppShell、ActivityBar、Sidebar、Tabs、Panel、StatusBar
+├── components/navigation/ # 实验包树、章节目录、搜索结果
+├── components/content/    # ChapterReader、ExperimentView、NoteView
+├── components/common/     # 图标、按钮、状态、空状态、错误状态
+├── stores/                # tabs、workspace、UI 布局等纯前端状态
+├── styles/                # 主题变量、Workbench 基础样式、Markdown 样式
+└── index.tsx
+```
+
+第一版先实现静态 Workbench 和 Markdown 阅读视图，再接入持久化、插件 UI 和真实执行面板。
+
 ---
 
 ## 📦 核心概念：实验包（Lab Package）

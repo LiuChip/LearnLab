@@ -75,10 +75,14 @@ learnlab/                              # LearnLab 源码仓库
 │           └── renderer/               # Preact + TSX + CSS
 │               ├── index.tsx
 │               ├── components/
-│               ├── views/
-│               ├── markdown/
-│               ├── stores/
-│               └── styles/
+│               │   ├── shell/            # ActivityBar、Sidebar、Tabs、Panel、StatusBar
+│               │   ├── navigation/       # 实验包树、章节目录、搜索结果
+│               │   ├── content/          # 阅读器、实验、笔记和历史视图
+│               │   └── common/           # 图标、按钮、错误和状态组件
+│               ├── views/                # 页面级视图组合
+│               ├── markdown/             # Markdown 内容适配和容器
+│               ├── stores/               # 标签、学习区和布局状态
+│               └── styles/               # Workbench 主题、布局和 Markdown 样式
 │
 ├── packages/                          # 可复用的 TypeScript 包
 │   ├── core-types/                     # manifest、权限、插件契约和 IPC 类型
