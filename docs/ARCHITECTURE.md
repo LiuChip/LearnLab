@@ -4,45 +4,58 @@
 >
 > 2026-09-01 更新：确认插件优先架构、有限作用域、独立插件宿主、执行监督、分层存储和按依赖链加载插件
 
-> 2026-09-02 更新：桌面 UI 直接采用 VSCode Workbench 对标方案；UI 由功能栏、主侧边栏、标签页、中央工作区、底部面板和状态栏组成，插件通过受控注册接口扩展视图。
+> 2026-09-04 更新：桌面 UI 直接采用 VSCode Workbench 对标方案；UI 由原生 Menubar、应用内命令入口、功能栏、主侧边栏、标签页、中央主窗口、可选辅助侧栏、底部面板、状态栏和独立通知宿主组成。普通视图的位置可由用户选择，AI 等明确辅助插件默认进入辅助侧栏；Fatal 由主进程隔离普通窗口并保留错误展示 UI。
 
 ## 🖥️ Workbench UI 架构
 
 LearnLab 的 UI 不是普通网页式两栏布局，而是以 VSCode Workbench 为参考的可扩展桌面工作台。布局职责固定为：
 
 ```text
-AppShell
-├── ActivityBar          # 一级功能切换：实验包、搜索、插件、依赖、设置
-├── PrimarySidebar       # 当前功能的树、列表和筛选
-├── EditorGroup
-│   ├── EditorTabs       # 教程、实验、笔记、日志和插件视图
-│   └── EditorArea       # 当前主要学习或实验内容
-├── BottomPanel          # 终端、输出、诊断和实验日志，按需展开
-└── StatusBar            # 进度、依赖、环境和插件状态
+Native Menubar / Application Menu
+└── AppShell
+    ├── CommandCenter          # 应用内上下文、快速打开和命令入口
+    ├── ActivityBar            # 章节、搜索替换、实验、插件、依赖、学习区、文件资源管理器
+    ├── PrimarySidebar         # 当前功能的树、列表和筛选
+    ├── EditorGroup            # 单一主编辑器组，不支持多个 Editor Group
+    │   ├── EditorTabs
+    │   └── EditorArea         # 沉浸式章节/实验/笔记/插件视图
+    ├── AuxiliarySidebar       # 用户可选的辅助视图；AI 默认使用
+    ├── BottomPanel            # 终端、输出、诊断和实验历史，按需展开
+    ├── StatusBar              # 阅读进度、已加载插件、未预览消息和插件状态项
+    └── NotificationHost       # 右下角运行时通知，不等于日志
 ```
 
 组件边界与核心业务边界分离：
 
 - `AppShell` 只负责布局和区域生命周期，不读取数据库或直接执行实验。
+- `CommandCenter` 只负责当前上下文和命令入口；菜单模板由 Electron 主进程管理。
 - `ChapterReader` 只接收已加载的章节模型和 Markdown 渲染结果。
-- `EditorTabs`、`BottomPanel` 和 `StatusBar` 使用可测试的 UI 状态模型。
+- `EditorTabs`、`AuxiliarySidebar`、`BottomPanel`、`StatusBar` 和 `NotificationHost` 使用可测试的 UI 状态模型。
+- 视图注册协议使用 `preferredLocation` 和 `userCanMove` 表达推荐位置；用户移动后的选择按视图 ID 保存。
 - 插件只能通过宿主注册 API 添加视图、命令、菜单和状态项，不能直接修改宿主 DOM。
 - 主题通过 CSS 变量传递，主题插件不能任意改变布局或绕过权限。
+
+### 窗口位置与故障隔离
+
+- 实验和沉浸式学习视图默认进入中央主窗口；AI 对话、实时诊断等明确的辅助插件默认进入辅助侧栏。
+- 普通插件视图可以由用户选择中央主窗口、辅助侧栏或底部面板；MVP 不支持多个 Editor Group。
+- 运行时通知由 `NotificationHost` 独立承载，日志仍进入日志/输出/实验历史视图。
+- `fatal` 由主进程统一处理：关闭普通 BrowserWindow，停止普通 IPC/UI 交互，保留专用错误展示窗口和对话框，写入脱敏报告；错误展示 UI 无法创建时使用系统原生错误对话框。
 
 建议的 renderer 目录：
 
 ```text
 apps/desktop/src/renderer/
-├── components/shell/      # AppShell、ActivityBar、Sidebar、Tabs、Panel、StatusBar
+├── components/shell/      # AppShell、CommandCenter、ActivityBar、Sidebar、Tabs、AuxiliarySidebar、Panel、StatusBar、NotificationHost
 ├── components/navigation/ # 实验包树、章节目录、搜索结果
-├── components/content/    # ChapterReader、ExperimentView、NoteView
+├── components/content/    # ChapterReader、ExperimentView、NoteView、HistoryView
 ├── components/common/     # 图标、按钮、状态、空状态、错误状态
-├── stores/                # tabs、workspace、UI 布局等纯前端状态
+├── stores/                # tabs、workspace、UI 布局、notifications 等纯前端状态
 ├── styles/                # 主题变量、Workbench 基础样式、Markdown 样式
 └── index.tsx
 ```
 
-第一版先实现静态 Workbench 和 Markdown 阅读视图，再接入持久化、插件 UI 和真实执行面板。
+第一版先实现静态 Workbench 和 Markdown 阅读视图，再接入持久化、插件 UI 和真实执行面板；正式图标和动效最后处理。
 
 ---
 

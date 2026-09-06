@@ -3,7 +3,11 @@ import { resolve } from 'path';
 
 export default defineConfig({
   main: {
-    plugins: [externalizeDepsPlugin({ exclude: ['@learnlab/core', '@learnlab/core-types', '@learnlab/markdown'] })]
+    plugins: [
+      externalizeDepsPlugin({
+        exclude: ['@learnlab/core', '@learnlab/core-types', '@learnlab/markdown']
+      })
+    ]
   },
   preload: {
     plugins: [externalizeDepsPlugin()]
@@ -12,7 +16,7 @@ export default defineConfig({
     resolve: {
       alias: {
         '@renderer': resolve('src/renderer'),
-        'react': 'preact/compat',
+        react: 'preact/compat',
         'react-dom': 'preact/compat'
       }
     },

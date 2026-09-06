@@ -68,20 +68,23 @@ learnlab/                              # LearnLab 源码仓库
 │           │   └── ipc/
 │           │       ├── package.ipc.ts
 │           │       ├── config.ipc.ts
-│           │       └── plugin.ipc.ts
+│           │       ├── plugin.ipc.ts
+│           │       ├── menu.ipc.ts
+│           │       ├── notification.ipc.ts
+│           │       └── fatal-error.ipc.ts
 │           ├── preload/                # contextBridge，TypeScript
 │           │   ├── index.ts
 │           │   └── index.d.ts
 │           └── renderer/               # Preact + TSX + CSS
 │               ├── index.tsx
 │               ├── components/
-│               │   ├── shell/            # ActivityBar、Sidebar、Tabs、Panel、StatusBar
-│               │   ├── navigation/       # 实验包树、章节目录、搜索结果
-│               │   ├── content/          # 阅读器、实验、笔记和历史视图
-│               │   └── common/           # 图标、按钮、错误和状态组件
+│               │   ├── shell/            # Menubar 对应入口、CommandCenter、ActivityBar、Sidebar、Tabs、AuxiliarySidebar、Panel、StatusBar、NotificationHost
+│               │   ├── navigation/       # 实验包树、章节目录、搜索替换、实验/插件/依赖/学习区列表、文件资源管理器
+│               │   ├── content/          # 阅读器、实验、笔记、历史和插件视图
+│               │   └── common/           # 图标占位、按钮、错误、通知和状态组件
 │               ├── views/                # 页面级视图组合
 │               ├── markdown/             # Markdown 内容适配和容器
-│               ├── stores/               # 标签、学习区和布局状态
+│               ├── stores/               # 标签、学习区、布局、窗口位置和通知状态
 │               └── styles/               # Workbench 主题、布局和 Markdown 样式
 │
 ├── packages/                          # 可复用的 TypeScript 包

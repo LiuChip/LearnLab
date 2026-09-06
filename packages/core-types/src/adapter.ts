@@ -11,5 +11,11 @@ export interface DependencyMetadata {
 }
 
 export function dependencyFingerprint(metadata: DependencyMetadata): string {
-  return [metadata.id, metadata.version, metadata.platform, metadata.arch, metadata.archive.sha256.toLowerCase()].join('@');
+  return [
+    metadata.id,
+    metadata.version,
+    metadata.platform,
+    metadata.arch,
+    metadata.archive.sha256.toLowerCase()
+  ].join('@');
 }

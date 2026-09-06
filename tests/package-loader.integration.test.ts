@@ -17,7 +17,11 @@ async function createPackage(manifest: string, chapter = '# Chapter') {
 
 afterEach(async () => {
   const { rm } = await import('node:fs/promises');
-  await Promise.all(temporaryDirectories.splice(0).map((directory) => rm(directory, { recursive: true, force: true })));
+  await Promise.all(
+    temporaryDirectories
+      .splice(0)
+      .map((directory) => rm(directory, { recursive: true, force: true }))
+  );
 });
 
 describe('package loader', () => {
@@ -77,7 +81,6 @@ describe('package loader', () => {
     expect(loaded).toMatchObject({ ok: false, error: { type: 'chapter_invalid_path' } });
     await readFile(outside, 'utf8');
   });
-
 
   it('rejects a chapters directory symlink that points outside the package', async () => {
     const root = await createPackage(`

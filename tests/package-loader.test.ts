@@ -20,7 +20,9 @@ describe('Package Paths', () => {
   });
 
   it('returns a normalized path only when the candidate stays inside the base', () => {
-    expect(normalizeSafePath('/pkg/chapters', 'foo/../01-intro.md')).toBe('/pkg/chapters/01-intro.md');
+    expect(normalizeSafePath('/pkg/chapters', 'foo/../01-intro.md')).toBe(
+      '/pkg/chapters/01-intro.md'
+    );
     expect(normalizeSafePath('/pkg/chapters', '../chapters-evil/secret.md')).toBeNull();
   });
 });

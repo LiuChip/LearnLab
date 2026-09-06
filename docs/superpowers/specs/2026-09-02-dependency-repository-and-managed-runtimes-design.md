@@ -83,7 +83,7 @@ MVP 不要求实现专门的动态服务端。客户端根据索引获取平台�
 ```yaml
 runtime_dependencies:
   - id: org.llvm.clang
-    version: ">=18.0.0"
+    version: '>=18.0.0'
     provider: learnlab.cpp
     source: repository
 ```
@@ -93,12 +93,13 @@ runtime_dependencies:
 ```yaml
 runtime_dependencies:
   - id: org.example.special-runtime
-    version: "1.0.0"
+    version: '1.0.0'
     provider: learnlab.example
     source: bundled
     bundled_artifact:
       path: bundled-dependencies/org.example.special-runtime/runtime.tar.zst
-      sha256: "..."
+      sha256: '<sha256-of-the-archive>'
+      size: <archive-size-in-bytes>
 ```
 
 第一版支持的 `source`：
@@ -114,15 +115,15 @@ runtime_dependencies:
 ```yaml
 external_prerequisites:
   - id: system.docker
-    version: ">=27.0.0"
+    version: '>=27.0.0'
     required: true
-    reason: "本实验需要 Docker 服务"
+    reason: '本实验需要 Docker 服务'
     detect: plugin
 
   - id: system.mysql
-    version: ">=8.0.0"
+    version: '>=8.0.0'
     required: false
-    reason: "也可以连接用户已有的 MySQL"
+    reason: '也可以连接用户已有的 MySQL'
     detect: plugin
 ```
 
@@ -141,7 +142,7 @@ arch: arm64
 
 archive:
   file: clang-18.1.8-darwin-arm64.tar.zst
-  sha256: "..."
+  sha256: '...'
   size: 245000000
 
 runtime:

@@ -7,7 +7,13 @@ import rehypeStringify from 'rehype-stringify';
 import { parseFrontMatter } from './frontmatter';
 import type { HeadingEntry, MarkdownResult } from './types';
 
-interface MdastNode { type: string; depth?: number; value?: string; children?: MdastNode[]; data?: Record<string, unknown> }
+interface MdastNode {
+  type: string;
+  depth?: number;
+  value?: string;
+  children?: MdastNode[];
+  data?: Record<string, unknown>;
+}
 
 function walk(node: MdastNode, callback: (node: MdastNode) => void): void {
   callback(node);
@@ -22,7 +28,13 @@ function textFromNode(node: MdastNode): string {
 function createSlugger() {
   const used = new Map<string, number>();
   return (text: string): string => {
-    const base = text.trim().toLocaleLowerCase().replace(/[^\p{L}\p{N}\s-]/gu, '').replace(/[\s-]+/g, '-').replace(/^-+|-+$/g, '') || 'heading';
+    const base =
+      text
+        .trim()
+        .toLocaleLowerCase()
+        .replace(/[^\p{L}\p{N}\s-]/gu, '')
+        .replace(/[\s-]+/g, '-')
+        .replace(/^-+|-+$/g, '') || 'heading';
     const count = (used.get(base) ?? 0) + 1;
     used.set(base, count);
     return count === 1 ? base : `${base}-${count}`;
@@ -55,9 +67,12 @@ export async function parseMarkdown(source: string): Promise<MarkdownResult> {
   const parser = unified().use(remarkParse).use(remarkGfm);
   const tree = parser.parse(content) as unknown as MdastNode;
   const headings = collectHeadings(tree);
-  const htmlProcessor = unified().use(remarkRehype).use(rehypeSanitize, {
-    clobberPrefix: ''
-  }).use(rehypeStringify);
+  const htmlProcessor = unified()
+    .use(remarkRehype)
+    .use(rehypeSanitize, {
+      clobberPrefix: ''
+    })
+    .use(rehypeStringify);
   const transformed = await htmlProcessor.run(tree as never);
   const html = String(htmlProcessor.stringify(transformed));
   return { html, plainText: extractPlainText(content), headings, frontmatter };

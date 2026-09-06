@@ -1,4 +1,10 @@
-import type { ChapterEntry, ExternalPrerequisite, PackageManifest, PluginRequirement, RuntimeDependency } from './manifest';
+import type {
+  ChapterEntry,
+  ExternalPrerequisite,
+  PackageManifest,
+  PluginRequirement,
+  RuntimeDependency
+} from './manifest';
 
 export interface ValidationError {
   path: string;
@@ -13,7 +19,12 @@ function isRecord(value: unknown): value is UnknownRecord {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function readString(value: unknown, path: string, errors: ValidationError[], required = true): string | undefined {
+function readString(
+  value: unknown,
+  path: string,
+  errors: ValidationError[],
+  required = true
+): string | undefined {
   if (value === undefined || value === null) {
     if (required) errors.push({ path, message: `Missing required field: ${path}` });
     return undefined;
@@ -25,7 +36,12 @@ function readString(value: unknown, path: string, errors: ValidationError[], req
   return value;
 }
 
-function readBoolean(value: unknown, path: string, errors: ValidationError[], required = true): boolean | undefined {
+function readBoolean(
+  value: unknown,
+  path: string,
+  errors: ValidationError[],
+  required = true
+): boolean | undefined {
   if (value === undefined || value === null) {
     if (required) errors.push({ path, message: `Missing required field: ${path}` });
     return undefined;
@@ -34,7 +50,11 @@ function readBoolean(value: unknown, path: string, errors: ValidationError[], re
   return typeof value === 'boolean' ? value : undefined;
 }
 
-function validatePluginRequirement(value: unknown, path: string, errors: ValidationError[]): PluginRequirement | undefined {
+function validatePluginRequirement(
+  value: unknown,
+  path: string,
+  errors: ValidationError[]
+): PluginRequirement | undefined {
   if (!isRecord(value)) {
     errors.push({ path, message: 'plugin requirement must be an object' });
     return undefined;
@@ -44,7 +64,11 @@ function validatePluginRequirement(value: unknown, path: string, errors: Validat
   return id && version ? { id, version } : undefined;
 }
 
-function validateChapter(value: unknown, path: string, errors: ValidationError[]): ChapterEntry | undefined {
+function validateChapter(
+  value: unknown,
+  path: string,
+  errors: ValidationError[]
+): ChapterEntry | undefined {
   if (!isRecord(value)) {
     errors.push({ path, message: 'chapter must be an object' });
     return undefined;
@@ -55,7 +79,11 @@ function validateChapter(value: unknown, path: string, errors: ValidationError[]
   return id && title && file ? { id, title, file } : undefined;
 }
 
-function validateRuntimeDependency(value: unknown, path: string, errors: ValidationError[]): RuntimeDependency | undefined {
+function validateRuntimeDependency(
+  value: unknown,
+  path: string,
+  errors: ValidationError[]
+): RuntimeDependency | undefined {
   if (!isRecord(value)) {
     errors.push({ path, message: 'runtime dependency must be an object' });
     return undefined;
@@ -64,25 +92,87 @@ function validateRuntimeDependency(value: unknown, path: string, errors: Validat
   const version = readString(value.version, `${path}.version`, errors);
   const provider = readString(value.provider, `${path}.provider`, errors);
   let source: RuntimeDependency['source'] = value.source as RuntimeDependency['source'] | undefined;
-  if (source !== undefined && source !== 'repository' && source !== 'bundled' && source !== 'either') {
-    errors.push({ path: `${path}.source`, message: 'source must be repository, bundled, or either' });
+  if (
+    source !== undefined &&
+    source !== 'repository' &&
+    source !== 'bundled' &&
+    source !== 'either'
+  ) {
+    errors.push({
+      path: `${path}.source`,
+      message: 'source must be repository, bundled, or either'
+    });
     source = undefined;
   }
   let bundled_artifact: RuntimeDependency['bundled_artifact'];
   if (value.bundled_artifact !== undefined) {
     if (!isRecord(value.bundled_artifact)) {
-      errors.push({ path: `${path}.bundled_artifact`, message: 'bundled_artifact must be an object' });
+      errors.push({
+        path: `${path}.bundled_artifact`,
+        message: 'bundled_artifact must be an object'
+      });
     } else {
-      const artifactPath = readString(value.bundled_artifact.path, `${path}.bundled_artifact.path`, errors);
-      const sha256 = readString(value.bundled_artifact.sha256, `${path}.bundled_artifact.sha256`, errors);
-      if (artifactPath && sha256) bundled_artifact = { path: artifactPath, sha256 };
+      const artifactPath = readString(
+        value.bundled_artifact.path,
+        `${path}.bundled_artifact.path`,
+        errors
+      );
+      const sha256 = readString(
+        value.bundled_artifact.sha256,
+        `${path}.bundled_artifact.sha256`,
+        errors
+      );
+      const sizeValue = value.bundled_artifact.size;
+      if (typeof sizeValue !== 'number' || !Number.isSafeInteger(sizeValue) || sizeValue < 0) {
+        errors.push({
+          path: `${path}.bundled_artifact.size`,
+          message: `${path}.bundled_artifact.size must be a non-negative safe integer`
+        });
+      }
+      if (sha256 && !/^[a-fA-F0-9]{64}$/.test(sha256)) {
+        errors.push({
+          path: `${path}.bundled_artifact.sha256`,
+          message: `${path}.bundled_artifact.sha256 must be a 64-character hexadecimal string`
+        });
+      }
+      if (
+        artifactPath &&
+        sha256 &&
+        typeof sizeValue === 'number' &&
+        Number.isSafeInteger(sizeValue) &&
+        sizeValue >= 0
+      ) {
+        bundled_artifact = { path: artifactPath, sha256, size: sizeValue };
+      }
     }
   }
+  if (source === 'bundled' && !bundled_artifact) {
+    errors.push({
+      path,
+      message: 'bundled source requires bundled_artifact'
+    });
+  }
+  if (source === 'repository' && bundled_artifact) {
+    errors.push({
+      path: `${path}.bundled_artifact`,
+      message: 'repository source must not declare bundled_artifact'
+    });
+  }
   if (!id || !version || !provider) return undefined;
-  return { id, version, provider, ...(source ? { source } : {}), ...(bundled_artifact ? { bundled_artifact } : {}) };
+  return {
+    id,
+    version,
+    provider,
+    ...(source ? { source } : {}),
+    ...(bundled_artifact ? { bundled_artifact } : {})
+  };
 }
 
-function validateExternalPrerequisite(value: unknown, path: string, errors: ValidationError[]): ExternalPrerequisite | undefined {
+function validateExternalPrerequisite(
+  value: unknown,
+  path: string,
+  errors: ValidationError[]
+): ExternalPrerequisite | undefined {
   if (!isRecord(value)) {
     errors.push({ path, message: 'external prerequisite must be an object' });
     return undefined;
@@ -90,25 +180,36 @@ function validateExternalPrerequisite(value: unknown, path: string, errors: Vali
   const id = readString(value.id, `${path}.id`, errors);
   const version = readString(value.version, `${path}.version`, errors);
   const required = readBoolean(value.required, `${path}.required`, errors);
-  let detect: ExternalPrerequisite['detect'] = value.detect as ExternalPrerequisite['detect'] | undefined;
+  let detect: ExternalPrerequisite['detect'] = value.detect as
+    ExternalPrerequisite['detect'] | undefined;
   if (detect !== undefined && detect !== 'plugin' && detect !== 'manual') {
     errors.push({ path: `${path}.detect`, message: 'detect must be plugin or manual' });
     detect = undefined;
   }
-  const reason = value.reason === undefined ? undefined : readString(value.reason, `${path}.reason`, errors, false);
-  return id && version && required !== undefined ? { id, version, required, ...(reason ? { reason } : {}), ...(detect ? { detect } : {}) } : undefined;
+  const reason =
+    value.reason === undefined
+      ? undefined
+      : readString(value.reason, `${path}.reason`, errors, false);
+  return id && version && required !== undefined
+    ? { id, version, required, ...(reason ? { reason } : {}), ...(detect ? { detect } : {}) }
+    : undefined;
 }
 
 export function validateManifest(raw: unknown): Result<PackageManifest, ValidationError[]> {
   const errors: ValidationError[] = [];
-  if (!isRecord(raw)) return { ok: false, error: [{ path: '', message: 'Manifest must be an object' }] };
+  if (!isRecord(raw))
+    return { ok: false, error: [{ path: '', message: 'Manifest must be an object' }] };
 
   const id = readString(raw.id, 'id', errors);
   const version = readString(raw.version, 'version', errors);
   const name = readString(raw.name, 'name', errors);
   const author = readString(raw.author, 'author', errors);
-  const description = raw.description === undefined ? undefined : readString(raw.description, 'description', errors, false);
-  const license = raw.license === undefined ? undefined : readString(raw.license, 'license', errors, false);
+  const description =
+    raw.description === undefined
+      ? undefined
+      : readString(raw.description, 'description', errors, false);
+  const license =
+    raw.license === undefined ? undefined : readString(raw.license, 'license', errors, false);
 
   const chapters: ChapterEntry[] = [];
   if (!Array.isArray(raw.chapters)) {
@@ -122,36 +223,56 @@ export function validateManifest(raw: unknown): Result<PackageManifest, Validati
 
   const required_plugins: PluginRequirement[] = [];
   if (raw.required_plugins !== undefined) {
-    if (!Array.isArray(raw.required_plugins)) errors.push({ path: 'required_plugins', message: 'required_plugins must be an array' });
-    else raw.required_plugins.forEach((item, index) => {
-      const parsed = validatePluginRequirement(item, `required_plugins[${index}]`, errors);
-      if (parsed) required_plugins.push(parsed);
-    });
+    if (!Array.isArray(raw.required_plugins))
+      errors.push({ path: 'required_plugins', message: 'required_plugins must be an array' });
+    else
+      raw.required_plugins.forEach((item, index) => {
+        const parsed = validatePluginRequirement(item, `required_plugins[${index}]`, errors);
+        if (parsed) required_plugins.push(parsed);
+      });
   }
 
   const runtime_dependencies: RuntimeDependency[] = [];
   if (raw.runtime_dependencies !== undefined) {
-    if (!Array.isArray(raw.runtime_dependencies)) errors.push({ path: 'runtime_dependencies', message: 'runtime_dependencies must be an array' });
-    else raw.runtime_dependencies.forEach((item, index) => {
-      const parsed = validateRuntimeDependency(item, `runtime_dependencies[${index}]`, errors);
-      if (parsed) runtime_dependencies.push(parsed);
-    });
+    if (!Array.isArray(raw.runtime_dependencies))
+      errors.push({
+        path: 'runtime_dependencies',
+        message: 'runtime_dependencies must be an array'
+      });
+    else
+      raw.runtime_dependencies.forEach((item, index) => {
+        const parsed = validateRuntimeDependency(item, `runtime_dependencies[${index}]`, errors);
+        if (parsed) runtime_dependencies.push(parsed);
+      });
   }
 
   const external_prerequisites: ExternalPrerequisite[] = [];
   if (raw.external_prerequisites !== undefined) {
-    if (!Array.isArray(raw.external_prerequisites)) errors.push({ path: 'external_prerequisites', message: 'external_prerequisites must be an array' });
-    else raw.external_prerequisites.forEach((item, index) => {
-      const parsed = validateExternalPrerequisite(item, `external_prerequisites[${index}]`, errors);
-      if (parsed) external_prerequisites.push(parsed);
-    });
+    if (!Array.isArray(raw.external_prerequisites))
+      errors.push({
+        path: 'external_prerequisites',
+        message: 'external_prerequisites must be an array'
+      });
+    else
+      raw.external_prerequisites.forEach((item, index) => {
+        const parsed = validateExternalPrerequisite(
+          item,
+          `external_prerequisites[${index}]`,
+          errors
+        );
+        if (parsed) external_prerequisites.push(parsed);
+      });
   }
 
   if (errors.length || !id || !version || !name || !author) return { ok: false, error: errors };
   return {
     ok: true,
     value: {
-      id, version, name, author, chapters,
+      id,
+      version,
+      name,
+      author,
+      chapters,
       ...(description ? { description } : {}),
       ...(license ? { license } : {}),
       ...(required_plugins.length ? { required_plugins } : {}),

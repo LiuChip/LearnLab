@@ -2,14 +2,20 @@ import { describe, expect, it } from 'vitest';
 import { resolvePlugins, satisfiesPluginVersion } from '../packages/core/src/plugin-resolver';
 import type { PluginManifest } from '@learnlab/core-types';
 
-const plugin = (plugin_id: string, version: string, extra: Partial<PluginManifest> = {}): PluginManifest => ({ plugin_id, version, ...extra });
+const plugin = (
+  plugin_id: string,
+  version: string,
+  extra: Partial<PluginManifest> = {}
+): PluginManifest => ({ plugin_id, version, ...extra });
 
 describe('plugin resolver', () => {
   it('loads global plugins and only package-required package plugins in dependency order', () => {
     const result = resolvePlugins({
       installedPlugins: [
         plugin('org.vim', '1.0.0', { activation: { mode: 'global' } }),
-        plugin('org.sql', '1.0.0', { requires_plugins: [{ id: 'org.terminal', version: '^1.0.0' }] }),
+        plugin('org.sql', '1.0.0', {
+          requires_plugins: [{ id: 'org.terminal', version: '^1.0.0' }]
+        }),
         plugin('org.terminal', '1.2.0'),
         plugin('org.unused', '1.0.0')
       ],
@@ -30,10 +36,18 @@ describe('plugin resolver', () => {
       ],
       disabledPluginIds: ['org.sql']
     });
-    expect(result.issues).toEqual(expect.arrayContaining([
-      expect.objectContaining({ requirement: { id: 'org.mysql', version: '>=1.0.0' }, reason: 'missing' }),
-      expect.objectContaining({ requirement: { id: 'org.sql', version: '>=2.0.0' }, reason: 'disabled' })
-    ]));
+    expect(result.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          requirement: { id: 'org.mysql', version: '>=1.0.0' },
+          reason: 'missing'
+        }),
+        expect.objectContaining({
+          requirement: { id: 'org.sql', version: '>=2.0.0' },
+          reason: 'disabled'
+        })
+      ])
+    );
     expect(result.readOnly).toBe(true);
   });
 
@@ -54,5 +68,34 @@ describe('plugin resolver', () => {
     expect(satisfiesPluginVersion('2.0.0', '^1.2.0')).toBe(false);
     expect(satisfiesPluginVersion('1.5.0', '>=1.0.0 <2.0.0')).toBe(true);
     expect(satisfiesPluginVersion('1.6.0', '~1.5.0')).toBe(false);
+  });
+
+  it('re-resolves a shared plugin after a later branch adds a tighter constraint', () => {
+    const result = resolvePlugins({
+      installedPlugins: [
+        plugin('org.a', '1.0.0', {
+          requires_plugins: [{ id: 'org.shared', version: '^1.0.0' }]
+        }),
+        plugin('org.constraint', '1.0.0', {
+          requires_plugins: [{ id: 'org.shared', version: '<1.2.0' }]
+        }),
+        plugin('org.shared', '1.5.0', {
+          requires_plugins: [{ id: 'org.high-only', version: '1.0.0' }]
+        }),
+        plugin('org.shared', '1.0.0', {
+          requires_plugins: [{ id: 'org.low-only', version: '1.0.0' }]
+        }),
+        plugin('org.high-only', '1.0.0'),
+        plugin('org.low-only', '1.0.0')
+      ],
+      packageRequirements: [
+        { id: 'org.a', version: '1.0.0' },
+        { id: 'org.constraint', version: '1.0.0' }
+      ]
+    });
+
+    expect(result.issues).toEqual([]);
+    expect(result.active.find((item) => item.plugin_id === 'org.shared')?.version).toBe('1.0.0');
+    expect(result.loadOrder).toEqual(['org.low-only', 'org.shared', 'org.a', 'org.constraint']);
   });
 });

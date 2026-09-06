@@ -13,6 +13,7 @@ export interface RuntimeDependency {
   bundled_artifact?: {
     path: string;
     sha256: string;
+    size: number;
   };
 }
 

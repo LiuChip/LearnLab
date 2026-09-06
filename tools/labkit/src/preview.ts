@@ -16,7 +16,20 @@ export async function previewPackage(packageDir: string) {
     const source = await readChapter(packageDir, chapter.file);
     if (!source.ok) return source;
     const parsed = await parseMarkdown(source.value);
-    chapters.push({ id: chapter.id, title: chapter.title, file: chapter.file, headings: parsed.headings.map((heading) => heading.text) });
+    chapters.push({
+      id: chapter.id,
+      title: chapter.title,
+      file: chapter.file,
+      headings: parsed.headings.map((heading) => heading.text)
+    });
   }
-  return { ok: true as const, value: { id: loaded.value.manifest.id, name: loaded.value.manifest.name, version: loaded.value.manifest.version, chapters } };
+  return {
+    ok: true as const,
+    value: {
+      id: loaded.value.manifest.id,
+      name: loaded.value.manifest.name,
+      version: loaded.value.manifest.version,
+      chapters
+    }
+  };
 }
