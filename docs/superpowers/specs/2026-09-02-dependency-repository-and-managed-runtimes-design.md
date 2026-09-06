@@ -2,9 +2,11 @@
 
 > 日期：2026-09-02
 > 状态：已确认，等待实现
-> 相关文档：[架构设计](../../ARCHITECTURE.md) · [数据模型](../../DATA_MODEL.md) · [安全机制](../../SECURITY.md) · [项目结构与语言边界](../../PROJECT_STRUCTURE.md) · [插件加载与 API 设计](2026-09-01-plugin-loading-and-scoped-permissions-design.md)
+> 相关文档：[架构设计](../../ARCHITECTURE.md) · [数据模型](../../DATA_MODEL.md) · [安全机制](../../SECURITY.md) · [项目结构与语言边界](../../PROJECT_STRUCTURE.md) · [插件加载与 API 设计](2026-09-01-plugin-loading-and-scoped-permissions-design.md) · [未冻结决策清单](../../../UNFREEZE.md)
 
 ## 1. 目标
+
+> **冻结边界**：依赖声明、依赖仓库/自带依赖的双来源、最终归档到学习区 `dependencies/`、独立运行时优先和系统级软件交由插件处理已经确认；仓库索引、版本解析、缓存/更新、平台矩阵和打包细节仍见 `UNFREEZE.md` 的 `REPO-*`/`EX-*` 条目。
 
 LearnLab 同时管理实验包、插件和实验运行所需的独立运行时。实验包不应为了常见运行时而重复携带大型依赖，但小众依赖又不能因为依赖仓库暂时没有收录而无法分发。因此依赖允许来自多个来源，但导入后的 LearnLab 管理运行时统一归档到当前学习区的 `dependencies/`。
 

@@ -1,8 +1,14 @@
 # UI 设计
 
-> 相关文档：[总览](OVERVIEW.md) · [架构设计](ARCHITECTURE.md) · [项目结构](PROJECT_STRUCTURE.md)
+> 相关文档：[总览](OVERVIEW.md) · [架构设计](ARCHITECTURE.md) · [项目结构](PROJECT_STRUCTURE.md) · [未冻结决策清单](../UNFREEZE.md)
 >
 > **正式决策（2026-09-04）**：LearnLab 的桌面 UI 直接以 VSCode Workbench 作为主要对标对象。对标范围包括布局、面板组织、标签页、命令入口、状态栏、通知和交互密度；图标、品牌、文案和学习内容模型使用 LearnLab 自己的设计。顶部原生 Menubar、应用内命令入口、主侧边栏、中央主窗口、可选辅助侧栏和底部面板都属于正式布局；图标最后实现，前期使用占位符。
+
+### UI 冻结边界
+
+当前已经冻结的是 Workbench 的区域组成、Activity Bar 的一级功能、章节树的交互、单一 Editor Group、不恢复关闭标签、AI 等辅助视图默认进入右侧辅助侧栏、状态栏核心信息、通知等级/位置/消失提示以及 Fatal 隔离行为。
+
+仍未冻结的是各区域精确尺寸和响应式断点、普通视图的默认落点和记忆方式、标签页的预览/固定/脏状态、搜索结果和替换确认的全部细节、通知堆叠与历史、快捷键默认值、UI 原型与正式 renderer 的长期边界，以及正式图标和最终视觉细节。实现这些部分时以 [UNFREEZE.md](../UNFREEZE.md) 的 `UI-*` 条目为准。
 
 ---
 

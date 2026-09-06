@@ -1,6 +1,6 @@
 # 架构设计
 
-> 相关文档：[插件加载与 API 设计](superpowers/specs/2026-09-01-plugin-loading-and-scoped-permissions-design.md) · [总览](OVERVIEW.md) · [UI 设计](UI_DESIGN.md) · [安全机制](SECURITY.md) · [路线图](ROADMAP.md) · [数据模型](DATA_MODEL.md) · [测试策略](TEST_STRATEGY.md) · [依赖仓库与独立运行时](superpowers/specs/2026-09-02-dependency-repository-and-managed-runtimes-design.md)
+> 相关文档：[插件加载与 API 设计](superpowers/specs/2026-09-01-plugin-loading-and-scoped-permissions-design.md) · [总览](OVERVIEW.md) · [UI 设计](UI_DESIGN.md) · [安全机制](SECURITY.md) · [路线图](ROADMAP.md) · [数据模型](DATA_MODEL.md) · [测试策略](TEST_STRATEGY.md) · [依赖仓库与独立运行时](superpowers/specs/2026-09-02-dependency-repository-and-managed-runtimes-design.md) · [未冻结决策清单](../UNFREEZE.md)
 >
 > 2026-09-01 更新：确认插件优先架构、有限作用域、独立插件宿主、执行监督、分层存储和按依赖链加载插件
 
@@ -13,6 +13,12 @@
 - 已有实例收到事件后恢复最小化/隐藏窗口并聚焦；如果主窗口尚在创建，则在创建完成后聚焦。
 - macOS 的 Dock/应用激活事件也复用同一套窗口聚焦逻辑；关闭主窗口后再次激活可以重新创建唯一主窗口。
 - 该策略意味着 MVP 不支持通过多进程同时打开同一学习区，也不需要为此额外设计多实例数据合并。
+
+### 架构决策的冻结边界
+
+- **已冻结**：单实例生命周期、核心模块边界、Workbench 区域职责、全局插件与当前包插件的加载方向、`AppContext`/`PackageContext` 的作用域意图，以及工作区/实验包/历史文件的存储分层。
+- **部分冻结**：普通视图可进入主区域或辅助侧栏、插件 UI 注册、执行监督和依赖运行时的总体方向。
+- **尚未冻结**：上下文的完整字段、能力级权限名、插件宿主进程拓扑、IPC 协议、运行时平台矩阵和 UI 状态持久化。具体条目及冻结条件见 [UNFREEZE.md](../UNFREEZE.md)。
 
 ## 🖥️ Workbench UI 架构
 

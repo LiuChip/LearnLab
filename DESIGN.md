@@ -26,8 +26,11 @@
 | **[插件加载与 API 设计](docs/superpowers/specs/2026-09-01-plugin-loading-and-scoped-permissions-design.md)** | 全局/实验包插件加载、上下文、读写执行权限和依赖解析 |
 | **[依赖仓库与独立运行时](docs/superpowers/specs/2026-09-02-dependency-repository-and-managed-runtimes-design.md)** | 依赖源、独立运行时、实验包自带依赖和外部前置软件 |
 | **[设计评估与开工报告](docs/EVALUATION.md)** | 当前设计评价、风险、未来功能和最小开工范围 |
+| **[未冻结决策清单](UNFREEZE.md)** | 已冻结、部分冻结、待定和明确推迟的设计决策台账 |
 
 ---
+
+> **决策状态说明**：本文件及专项文档描述当前采用的设计；每项设计的确定程度、未冻结细节和冻结条件统一记录在 [UNFREEZE.md](UNFREEZE.md)。未冻结项只能使用最小、可替换的实现，不得被默认为最终公共协议。
 
 ## ⚠️ 设计红线
 

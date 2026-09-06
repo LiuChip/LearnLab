@@ -1,10 +1,14 @@
 # 安全机制
 
-> 相关文档：[插件加载与 API 设计](superpowers/specs/2026-09-01-plugin-loading-and-scoped-permissions-design.md) · [架构设计](ARCHITECTURE.md) · [路线图](ROADMAP.md) · [数据模型](DATA_MODEL.md)
+> 相关文档：[插件加载与 API 设计](superpowers/specs/2026-09-01-plugin-loading-and-scoped-permissions-design.md) · [架构设计](ARCHITECTURE.md) · [路线图](ROADMAP.md) · [数据模型](DATA_MODEL.md) · [未冻结决策清单](../UNFREEZE.md)
 >
 > 设计目标：对普通用户诚实说明风险，并用作用域限制、独立插件宿主和执行监督降低误操作风险；不把本地进程限制冒充成 OS 沙箱。
 
 LearnLab 会打开本地内容、调用插件和运行实验环境。任何“执行代码”能力都必须由用户主动授权。普通用户最重要的安全保证是：未知实验包默认可阅读、执行能力单独确认、插件不能默认访问学习区中的其他内容。
+
+### 安全决策的冻结边界
+
+作用域的大方向、读/写/执行三层权限、开发者模式风险提示、全局/包级插件加载边界和“不承诺 OS 级沙箱”已经冻结。能力 ID、路径通配规则、网络目标策略、外部文件句柄生命周期、权限合并/撤销和资源配额仍未冻结；它们不能仅凭本文件当前示例就视为稳定插件协议。
 
 ---
 

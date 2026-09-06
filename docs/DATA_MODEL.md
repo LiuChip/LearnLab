@@ -1,6 +1,6 @@
 # 数据模型
 
-> 相关文档：[插件加载与 API 设计](superpowers/specs/2026-09-01-plugin-loading-and-scoped-permissions-design.md) · [依赖仓库与独立运行时](superpowers/specs/2026-09-02-dependency-repository-and-managed-runtimes-design.md) · [架构设计](ARCHITECTURE.md) · [安全机制](SECURITY.md) · [路线图](ROADMAP.md)
+> 相关文档：[插件加载与 API 设计](superpowers/specs/2026-09-01-plugin-loading-and-scoped-permissions-design.md) · [依赖仓库与独立运行时](superpowers/specs/2026-09-02-dependency-repository-and-managed-runtimes-design.md) · [架构设计](ARCHITECTURE.md) · [安全机制](SECURITY.md) · [路线图](ROADMAP.md) · [未冻结决策清单](../UNFREEZE.md)
 
 ## 目标
 
@@ -10,6 +10,10 @@ LearnLab 只保留两层数据库，避免把学习区组织关系和实验包�
 2. 每个实验包一个 `package.db`；
 3. 全局设置和插件设置使用 `~/.learnlab/config.json`；
 4. 实验运行细节使用实验包内的 `experiment_history/` 文件。
+
+### 数据决策的冻结边界
+
+存储归属已经冻结：学习区数据库负责包登记、软连接和共享依赖；实验包数据库负责章节、阅读进度和轻量实验摘要；详细运行数据放在 `experiment_history/`；插件设置随配置 JSON 导入/导出。完整表结构、索引、迁移版本、跨路径重连、搜索索引、历史清理和 UI 会话持久化仍未冻结，详见 [UNFREEZE.md](../UNFREEZE.md) 的 `DATA-*` 条目。
 
 ## 学习区数据库：`workspace.db`
 
