@@ -1,0 +1,17 @@
+import type { AuxiliaryTabId, WorkbenchAction, WorkbenchState } from '../model/workbench';
+import { Icon } from './Icon';
+
+export function AuxiliarySidebar({ state, dispatch }: { state: WorkbenchState; dispatch: (action: WorkbenchAction) => void }) {
+  const tabs: Array<{ id: AuxiliaryTabId; label: string }> = [{ id: 'assistant', label: 'AI 助手' }, { id: 'context', label: '上下文' }, { id: 'output', label: '输出' }];
+  return <aside class="auxiliary-sidebar">
+    <div class="aux-heading"><strong>辅助视图</strong><div><button class="ghost-button" type="button" title="更多操作" aria-label="更多操作">···</button><button class="ghost-button" type="button" title="关闭辅助栏" aria-label="关闭辅助栏" onClick={() => dispatch({ type: 'toggleAuxiliary' })}>×</button></div></div>
+    <div class="aux-tabs" role="tablist">{tabs.map((tab) => <button type="button" role="tab" aria-selected={state.auxiliaryTab === tab.id} class={state.auxiliaryTab === tab.id ? 'is-active' : ''} key={tab.id} onClick={() => dispatch({ type: 'setAuxiliaryTab', tab: tab.id })}><Icon glyph={tab.id === 'assistant' ? '✦' : tab.id === 'context' ? '◎' : '≡'} />{tab.label}</button>)}</div>
+    {state.auxiliaryTab === 'assistant' ? <AssistantView /> : null}
+    {state.auxiliaryTab === 'context' ? <ContextView /> : null}
+    {state.auxiliaryTab === 'output' ? <OutputView /> : null}
+  </aside>;
+}
+
+function AssistantView() { return <div class="aux-content assistant-view"><div class="assistant-identity"><div class="assistant-avatar">✦</div><div><strong>LearnLab Assistant</strong><small>当前实验包 · SQL 基础</small></div><span class="status-dot status-dot-green" /></div><div class="assistant-message"><span class="message-label">学习伙伴</span><p>你好！我可以解释当前章节、分析实验报错，或者帮你把问题拆成几个更小的步骤。</p></div><div class="assistant-suggestions"><button type="button">解释这段 SQL</button><button type="button">我卡住了，给我提示</button><button type="button">总结当前章节</button></div><div class="assistant-spacer" /><div class="assistant-composer"><textarea placeholder="向 AI 助手提问…" aria-label="向 AI 助手提问" /><div class="composer-footer"><span>Enter 发送 · Shift+Enter 换行</span><button class="send-button" type="button" title="发送" aria-label="发送">↑</button></div></div><div class="assistant-note"><Icon glyph="ⓘ" /> AI 的回答可能不准确，请结合实验结果验证。</div></div>; }
+function ContextView() { return <div class="aux-content"><div class="context-card"><span class="context-icon">▤</span><div><strong>1.1 基础查询.md</strong><small>当前打开的章节</small></div></div><div class="aux-section-title">当前上下文</div><div class="context-list"><div><span>当前学习区</span><strong>SQL 基础</strong></div><div><span>当前实验包</span><strong>sql-intro@1.2.0</strong></div><div><span>已加载插件</span><strong>3 个</strong></div><div><span>阅读进度</span><strong>62%</strong></div></div><div class="aux-section-title">可用能力</div><div class="capability-list"><span>章节阅读</span><span>实验运行</span><span>历史查询</span></div></div>; }
+function OutputView() { return <div class="aux-content output-view"><div class="output-toolbar"><span>今天 10:24</span><button class="link-button" type="button">清空</button></div><div class="log-line"><span class="log-time">10:24:18</span><span class="log-info">INFO</span><span>chapter parsed: basics</span></div><div class="log-line"><span class="log-time">10:24:19</span><span class="log-info">INFO</span><span>plugin loaded: sql-runner</span></div><div class="log-line"><span class="log-time">10:24:20</span><span class="log-warn">WARN</span><span>optional mysql client missing</span></div></div>; }
