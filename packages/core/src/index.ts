@@ -16,3 +16,5 @@ export * from './content-fingerprint';
 export * from './reading-progress';
 export * from './experiment-history';
 export * from './settings-transfer';
+export * from './search';
+export * from './chapter-navigation';

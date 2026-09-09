@@ -64,7 +64,7 @@
   --scrollbar: rgba(100, 100, 100, 0.22);
   --scrollbar-hover: rgba(100, 100, 100, 0.38);
   --code: #f6f8fa;
-  --status: #0078d4;
-  --status-hover: rgba(255,255,255,.18);
+  --status: #f3f3f3;
+  --status-hover: #e8e8e8;
   color-scheme: light;
 }

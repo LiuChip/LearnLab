@@ -29,6 +29,7 @@ export interface ChapterEntry {
   id: string;
   title: string;
   file: string;
+  experiment_count?: number;
 }
 
 export interface PackageManifest {
@@ -38,6 +39,7 @@ export interface PackageManifest {
   author: string;
   description?: string;
   license?: string;
+  experiment_count?: number;
   chapters: ChapterEntry[];
   required_plugins?: PluginRequirement[];
   runtime_dependencies?: RuntimeDependency[];

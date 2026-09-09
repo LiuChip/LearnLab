@@ -1,12 +1,101 @@
-import type { BottomPanelId, WorkbenchAction, WorkbenchState } from '../model/workbench';
-import { Icon } from './Icon';
+import {
+  experiments,
+  type BottomPanelId,
+  type WorkbenchAction,
+  type WorkbenchState
+} from '../model/workbench';
 
-const panels: Array<{ id: BottomPanelId; label: string }> = [{ id: 'terminal', label: '终端' }, { id: 'output', label: '输出' }, { id: 'history', label: '实验历史' }, { id: 'problems', label: '问题' }];
+const panels: Array<{ id: BottomPanelId; label: string }> = [
+  { id: 'terminal', label: '终端' },
+  { id: 'output', label: '输出' },
+  { id: 'history', label: '实验历史' },
+  { id: 'problems', label: '问题' }
+];
 
-export function BottomPanel({ state, dispatch }: { state: WorkbenchState; dispatch: (action: WorkbenchAction) => void }) {
-  return <section class="bottom-panel"><div class="bottom-tabs">{panels.map((panel) => <button type="button" class={state.bottomPanel === panel.id ? 'is-active' : ''} key={panel.id} onClick={() => dispatch({ type: 'setBottomPanel', panel: panel.id })}>{panel.label}{panel.id === 'problems' ? <span class="panel-count">0</span> : null}</button>)}<span class="meta-spacer" /><button class="ghost-button" type="button" title="最大化面板" aria-label="最大化面板">⌃</button><button class="ghost-button" type="button" title="关闭面板" aria-label="关闭面板" onClick={() => dispatch({ type: 'toggleBottomPanel' })}>×</button></div><div class="bottom-content">{state.bottomPanel === 'terminal' ? <Terminal /> : null}{state.bottomPanel === 'output' ? <Output /> : null}{state.bottomPanel === 'history' ? <History /> : null}{state.bottomPanel === 'problems' ? <Problems /> : null}</div></section>;
+export function BottomPanel({
+  state,
+  dispatch
+}: {
+  state: WorkbenchState;
+  dispatch: (action: WorkbenchAction) => void;
+}) {
+  return (
+    <section class="bottom-panel" aria-label="底部面板">
+      <div class="bottom-tabs" role="tablist" aria-label="底部标签">
+        {panels.map((panel) => (
+          <button
+            role="tab"
+            aria-selected={state.bottomPanel === panel.id}
+            key={panel.id}
+            onClick={() => dispatch({ type: 'setBottomPanel', panel: panel.id })}
+          >
+            {panel.label}
+          </button>
+        ))}
+        <span class="toolbar-spacer" />
+        <button
+          class="ghost-button"
+          title="关闭面板"
+          aria-label="关闭面板"
+          onClick={() => dispatch({ type: 'toggleBottomPanel' })}
+        >
+          ×
+        </button>
+      </div>
+      <div class="bottom-content">
+        {state.bottomPanel === 'terminal' && (
+          <div class="terminal-view">
+            <div class="terminal-header">SQL Runner · 模拟终端</div>
+            {state.experimentHistory.length ? (
+              [...state.experimentHistory].reverse().map((run) => (
+                <div key={run.id}>
+                  <p>
+                    <span class="terminal-prompt">learnlab $ </span>run {run.experimentId}
+                  </p>
+                  <p>{run.output}</p>
+                </div>
+              ))
+            ) : (
+              <p>暂无运行输出</p>
+            )}
+          </div>
+        )}
+        {state.bottomPanel === 'output' && (
+          <div class="terminal-view">
+            <p>[INFO] sql-intro@1.2.0 已加载</p>
+            <p>[INFO] SQLite 3 就绪</p>
+            {state.experimentHistory.map((run) => (
+              <p key={run.id}>
+                [INFO] {run.experimentId}: {run.output}
+              </p>
+            ))}
+          </div>
+        )}
+        {state.bottomPanel === 'history' &&
+          (state.experimentHistory.length ? (
+            <table class="history-table">
+              <thead>
+                <tr>
+                  <th>实验</th>
+                  <th>状态</th>
+                  <th>时间</th>
+                </tr>
+              </thead>
+              <tbody>
+                {state.experimentHistory.map((run) => (
+                  <tr key={run.id}>
+                    <td>{experiments.find((item) => item.id === run.experimentId)?.title}</td>
+                    <td class="success-label">通过</td>
+                    <td>{new Date(run.completedAt).toLocaleTimeString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <p class="empty-copy">暂无本次会话的运行记录</p>
+          ))}
+        {state.bottomPanel === 'problems' && <p class="empty-copy">当前没有诊断信息</p>}
+      </div>
+    </section>
+  );
 }
-function Terminal() { return <div class="terminal-view"><div class="terminal-header"><span>zsh</span><span class="meta-spacer" /><span>SQL Runner Runtime</span></div><div class="terminal-lines"><div><span class="terminal-prompt">learnlab</span><span class="terminal-symbol">$</span> ll run sql --file query.sql</div><div class="terminal-dim">Preparing sandbox …</div><div class="terminal-success">✓ Experiment completed in 4.2s</div><div><span class="terminal-prompt">learnlab</span><span class="terminal-symbol">$</span><span class="terminal-cursor" /></div></div></div>; }
-function Output() { return <div class="panel-list"><div class="panel-list-line"><Icon glyph="●" class="green-icon" /><span>chapter parsed</span><span class="meta-spacer" /><time>10:24:18</time></div><div class="panel-list-line"><Icon glyph="●" class="green-icon" /><span>plugin loaded: sql-runner</span><span class="meta-spacer" /><time>10:24:19</time></div><div class="panel-list-line"><Icon glyph="●" class="warning-icon" /><span>optional mysql client missing</span><span class="meta-spacer" /><time>10:24:20</time></div></div>; }
-function History() { return <div class="history-table"><div class="history-table-head"><span>实验</span><span>状态</span><span>时间</span><span>耗时</span></div><div class="history-table-row"><strong>实验 1：查询学生信息</strong><span class="success-label">✓ 通过</span><span>今天 10:18</span><span>4.2s</span></div><div class="history-table-row"><strong>实验 2：筛选成绩记录</strong><span class="muted-text">○ 未运行</span><span>—</span><span>—</span></div></div>; }
-function Problems() { return <div class="empty-panel"><span class="empty-symbol">✓</span><strong>没有发现问题</strong><span>当前实验包与插件没有报告错误。</span></div>; }

@@ -1,5 +1,14 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import type { LoadedPackage, LoadError, ReadingProgressRecord, ChapterProgressUpdate, ExperimentAttemptDetail } from '@learnlab/core';
+import type {
+  LoadedPackage,
+  LoadError,
+  ReadingProgressRecord,
+  ChapterProgressUpdate,
+  ExperimentAttemptDetail,
+  SearchOptions,
+  SearchResult,
+  ChapterNavigationItem
+} from '@learnlab/core';
 import type {
   ImportDependencyResult,
   RegisterPackageResult,
@@ -17,6 +26,14 @@ const api = {
     ipcRenderer.invoke('package:load', packageDir),
   readChapter: (packageDir: string, chapterFile: string): Promise<Result<string, LoadError>> =>
     ipcRenderer.invoke('package:read-chapter', packageDir, chapterFile),
+  package: {
+    search: (packageDir: string, options: SearchOptions): Promise<SearchResult> =>
+      ipcRenderer.invoke('package:search', packageDir, options),
+    searchWorkspace: (workspaceDir: string, options: SearchOptions): Promise<SearchResult> =>
+      ipcRenderer.invoke('package:search-workspace', workspaceDir, options),
+    listChapters: (packageDir: string): Promise<ChapterNavigationItem[]> =>
+      ipcRenderer.invoke('package:list-chapters', packageDir)
+  },
   workspace: {
     init: (workspaceDir: string): Promise<WorkspacePaths> =>
       ipcRenderer.invoke('workspace:init', workspaceDir),

@@ -1,4 +1,13 @@
-import type { LoadedPackage, LoadError, ReadingProgressRecord, ChapterProgressUpdate, ExperimentAttemptDetail } from '@learnlab/core';
+import type {
+  LoadedPackage,
+  LoadError,
+  ReadingProgressRecord,
+  ChapterProgressUpdate,
+  ExperimentAttemptDetail,
+  SearchOptions,
+  SearchResult,
+  ChapterNavigationItem
+} from '@learnlab/core';
 import type {
   ImportDependencyResult,
   RegisterPackageResult,
@@ -14,6 +23,11 @@ export interface LearnLabAPI {
   getExamplePackageDir: () => Promise<string>;
   loadPackage: (packageDir: string) => Promise<Result<LoadedPackage, LoadError>>;
   readChapter: (packageDir: string, chapterFile: string) => Promise<Result<string, LoadError>>;
+  package: {
+    search: (packageDir: string, options: SearchOptions) => Promise<SearchResult>;
+    searchWorkspace: (workspaceDir: string, options: SearchOptions) => Promise<SearchResult>;
+    listChapters: (packageDir: string) => Promise<ChapterNavigationItem[]>;
+  };
   workspace: {
     init: (workspaceDir: string) => Promise<WorkspacePaths>;
     registerPackage: (workspaceDir: string, packageDir: string) => Promise<RegisterPackageResult>;

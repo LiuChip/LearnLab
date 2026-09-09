@@ -1,72 +1,231 @@
-import { useEffect, useMemo, useState } from 'preact/hooks';
-import { parseMarkdown, type MarkdownResult } from '@learnlab/markdown';
+import { useEffect, useState, useCallback } from 'preact/hooks';
+import type { RegisteredPackage } from '@learnlab/core-types';
+import { useReadingStore } from './stores/readingStore';
+import { ChapterTree } from './components/navigation/ChapterTree';
+import { ContentsOutline } from './components/navigation/ContentsOutline';
+import { ChapterReader } from './components/content/ChapterReader';
 import './styles/base.css';
 import './styles/theme.css';
 import './styles/markdown.css';
 
 export function App() {
-  const [chapterIndex, setChapterIndex] = useState(0);
-  const [markdown, setMarkdown] = useState<MarkdownResult | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [packageName, setPackageName] = useState('LearnLab');
+  const store = useReadingStore();
+  const [workspacePackages, setWorkspacePackages] = useState<RegisteredPackage[]>([]);
+  const [selectedPkgPath, setSelectedPkgPath] = useState<string>('');
 
+  // Initial package source discovery
   useEffect(() => {
     let cancelled = false;
-    async function load(): Promise<void> {
-      const examplePackage = await window.learnlab.getExamplePackageDir();
-      const loaded = await window.learnlab.loadPackage(examplePackage);
-      if (!loaded.ok) {
-        if (!cancelled) setError(loaded.error.message);
-        return;
-      }
-      if (!cancelled) setPackageName(loaded.value.manifest.name);
-      const chapter = loaded.value.manifest.chapters[chapterIndex];
-      if (!chapter) return;
-      const source = await window.learnlab.readChapter(loaded.value.dir, chapter.file);
-      if (!source.ok) {
-        if (!cancelled) setError(source.error.message);
-        return;
-      }
+    async function initPackageSource() {
       try {
-        const parsed = await parseMarkdown(source.value);
-        if (!cancelled) setMarkdown(parsed);
-      } catch (cause) {
-        if (!cancelled) setError(cause instanceof Error ? cause.message : String(cause));
+        let pkgDir: string | null = null;
+        // Check if there are registered workspace packages
+        // In current MVP without an active chosen workspace folder, fallback to example
+        const exampleDir = await window.learnlab.getExamplePackageDir();
+        pkgDir = exampleDir;
+        setSelectedPkgPath(exampleDir);
+        setWorkspacePackages([
+          { id: 'example', name: 'SQL 基础入门 (示例)', version: '1.0.0', path: exampleDir, isSymlink: false, registeredAt: '' }
+        ]);
+
+        if (!cancelled && pkgDir) {
+          await store.loadPackageByPath(pkgDir);
+        }
+      } catch (err) {
+        console.error('Failed to initialize package source:', err);
       }
     }
-    void load();
+    void initPackageSource();
     return () => {
       cancelled = true;
     };
-  }, [chapterIndex]);
+  }, []);
 
-  const heading = useMemo(
-    () => markdown?.headings.find((item) => item.depth === 1)?.text ?? '欢迎使用 LearnLab',
-    [markdown]
-  );
+  const handleJumpToHeading = useCallback((headingId: string) => {
+    const el = document.getElementById(headingId);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, []);
+
+  const handleSearchSubmit = (e: Event) => {
+    e.preventDefault();
+    if (store.searchQuery.trim()) {
+      store.runSearch(store.searchQuery);
+    }
+  };
+
+  const handleSelectSearchMatch = (chapterId: string) => {
+    store.selectChapter(chapterId);
+  };
+
   return (
     <main class="app-shell">
+      {/* 顶部标题栏 */}
       <header class="app-header">
-        <strong>{packageName}</strong>
-        <span>本地实验包阅读原型</span>
-      </header>
-      {error ? (
-        <div class="error" role="alert">
-          {error}
+        <div class="header-title-area">
+          <strong>{store.packageName}</strong>
+          <span>LearnLab 本地交互式实验浏览器</span>
         </div>
-      ) : null}
+        {workspacePackages.length > 1 && (
+          <select
+            value={selectedPkgPath}
+            onChange={(e) => {
+              const path = (e.target as HTMLSelectElement).value;
+              setSelectedPkgPath(path);
+              store.loadPackageByPath(path);
+            }}
+          >
+            {workspacePackages.map((p) => (
+              <option key={p.id} value={p.path}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+        )}
+      </header>
+
+      {/* 主工作区两栏布局 */}
       <section class="reader-layout">
-        <aside class="toc">
-          <h2>章节</h2>
-          <button onClick={() => setChapterIndex(0)}>1. 基础查询</button>
-          <button onClick={() => setChapterIndex(1)}>2. 条件过滤</button>
-        </aside>
-        <article class="reader">
-          <h1>{heading}</h1>
-          <div
-            dangerouslySetInnerHTML={{ __html: markdown?.html ?? '<p>正在加载示例实验包……</p>' }}
+        <aside class="sidebar">
+          {/* 搜索面板 */}
+          <div class="search-box">
+            <form onSubmit={handleSearchSubmit} class="search-form">
+              <div class="search-input-wrapper">
+                <input
+                  type="text"
+                  class="search-input"
+                  placeholder="搜索当前实验包..."
+                  value={store.searchQuery}
+                  onInput={(e) => store.setSearchQuery((e.target as HTMLInputElement).value)}
+                />
+                <button type="submit" class="option-btn" title="执行搜索">
+                  🔍
+                </button>
+              </div>
+              <div class="search-options">
+                <button
+                  type="button"
+                  class={`option-btn ${store.searchOptions.caseSensitive ? 'is-active' : ''}`}
+                  onClick={() =>
+                    store.setSearchOptions((prev) => ({
+                      ...prev,
+                      caseSensitive: !prev.caseSensitive
+                    }))
+                  }
+                  title="区分大小写 (Aa)"
+                >
+                  Aa
+                </button>
+                <button
+                  type="button"
+                  class={`option-btn ${store.searchOptions.wholeWord ? 'is-active' : ''}`}
+                  onClick={() =>
+                    store.setSearchOptions((prev) => ({
+                      ...prev,
+                      wholeWord: !prev.wholeWord
+                    }))
+                  }
+                  title="全字匹配 (\b)"
+                >
+                  \b
+                </button>
+                <button
+                  type="button"
+                  class={`option-btn ${store.searchOptions.isRegex ? 'is-active' : ''}`}
+                  onClick={() =>
+                    store.setSearchOptions((prev) => ({
+                      ...prev,
+                      isRegex: !prev.isRegex
+                    }))
+                  }
+                  title="正则表达式 (.*)"
+                >
+                  .*
+                </button>
+                {store.searchResults && (
+                  <button
+                    type="button"
+                    class="clear-search-btn"
+                    onClick={store.clearSearch}
+                    title="清空搜索结果"
+                  >
+                    清空
+                  </button>
+                )}
+              </div>
+            </form>
+          </div>
+
+          {/* 搜索结果展示 */}
+          {store.isSearching ? (
+            <div class="search-results-panel">
+              <div class="search-summary">正在检索实验包...</div>
+            </div>
+          ) : store.searchResults ? (
+            <div class="search-results-panel">
+              {store.searchResults.error ? (
+                <div class="search-summary" style={{ color: '#dc2626' }}>
+                  {store.searchResults.error}
+                </div>
+              ) : (
+                <div class="search-success-content">
+                  <div class="search-summary">
+                    找到 {store.searchResults.totalMatches} 处匹配 (共检索 {store.searchResults.searchedChapters} 节)
+                  </div>
+                  {store.searchResults.matches.length > 0 && (
+                    <ul class="search-match-list" role="list">
+                      {store.searchResults.matches.map((m, idx) => (
+                        <li key={idx} class="search-match-item">
+                          <button
+                            type="button"
+                            class="search-match-btn"
+                            onClick={() => handleSelectSearchMatch(m.chapterId)}
+                          >
+                            <div class="match-meta">
+                              <span>{m.chapterTitle}</span>
+                              <span>第 {m.line} 行</span>
+                            </div>
+                            <div class="match-snippet">{m.preview}</div>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
+            </div>
+          ) : null}
+
+          {/* 章节目录 */}
+          <ChapterTree
+            chapters={store.chapters}
+            activeChapterId={store.activeChapterId}
+            onSelectChapter={store.selectChapter}
           />
-        </article>
+
+          {/* 本章大纲 */}
+          <ContentsOutline
+            headings={store.markdown?.headings ?? []}
+            onJumpToHeading={handleJumpToHeading}
+          />
+        </aside>
+
+        {/* 章节阅读主体 */}
+        <ChapterReader
+          markdown={store.markdown}
+          activeChapter={store.activeChapter}
+          prevChapter={store.prevChapter}
+          nextChapter={store.nextChapter}
+          readonlyStatus={store.readonlyStatus}
+          isLoading={store.isLoading}
+          error={store.error}
+          copyStatus={store.copyStatus}
+          onNavigateChapter={store.selectChapter}
+          onToggleCompleted={store.toggleCompleted}
+          onCopyCode={store.copyCodeToClipboard}
+          onScrollChange={store.updateScroll}
+        />
       </section>
     </main>
   );

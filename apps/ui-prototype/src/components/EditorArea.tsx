@@ -1,55 +1,358 @@
-import { useMemo } from 'preact/hooks';
+import { useEffect, useLayoutEffect, useRef } from 'preact/hooks';
 import type { WorkbenchAction, WorkbenchState } from '../model/workbench';
-import { chapters, experiments, findChapter } from '../model/workbench';
-import { chapterContent } from '../data/viewData';
-import { Icon } from './Icon';
+import { experiments, findChapter, chapters } from '../model/workbench';
 
-interface EditorAreaProps {
-  state: WorkbenchState;
-  dispatch: (action: WorkbenchAction) => void;
+type Props = { state: WorkbenchState; dispatch: (action: WorkbenchAction) => void };
+
+export function EditorArea({ state, dispatch }: Props) {
+  const activeTab = state.editorTabs.find((tab) => tab.id === state.activeTabId);
+  const activeDocument =
+    activeTab?.kind === 'document' ? state.documents[activeTab.chapterId!] : undefined;
+  const reader = useRef<HTMLElement>(null);
+  const tabStrip = useRef<HTMLDivElement>(null);
+  const restoring = useRef(false);
+  const lastSearchRequest = useRef(0);
+  useEffect(() => {
+    if (activeTab?.kind !== 'document' || !reader.current) return;
+    const element = reader.current;
+    const measure = () => {
+      if (element.clientHeight > 0 && element.scrollHeight <= element.clientHeight + 1)
+        dispatch({ type: 'recordScroll', tabId: activeTab.id, top: 0, progress: 1 });
+    };
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [activeTab?.id, state.documents, dispatch]);
+  useLayoutEffect(() => {
+    restoring.current = true;
+    if (reader.current) reader.current.scrollTop = state.scrollPositions[state.activeTabId] ?? 0;
+    const selected = tabStrip.current?.querySelector<HTMLElement>('.is-active');
+    if (selected && tabStrip.current) {
+      const strip = tabStrip.current;
+      if (selected.offsetLeft < strip.scrollLeft) strip.scrollLeft = selected.offsetLeft;
+      else if (selected.offsetLeft + selected.offsetWidth > strip.scrollLeft + strip.clientWidth)
+        strip.scrollLeft = selected.offsetLeft + selected.offsetWidth - strip.clientWidth;
+    }
+    const frame = requestAnimationFrame(() => {
+      restoring.current = false;
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [state.activeTabId, activeDocument]);
+  useLayoutEffect(() => {
+    if (
+      !state.searchTarget ||
+      state.searchTarget.request === lastSearchRequest.current ||
+      activeTab?.chapterId !== state.searchTarget.chapterId
+    )
+      return;
+    lastSearchRequest.current = state.searchTarget.request;
+    const target = reader.current?.querySelector<HTMLElement>(
+      `[data-search-line="${state.searchTarget.line}"]`
+    );
+    if (target && reader.current) {
+      reader.current.scrollTop +=
+        target.getBoundingClientRect().top - reader.current.getBoundingClientRect().top - 20;
+      dispatch({ type: 'recordScroll', tabId: activeTab.id, top: reader.current.scrollTop });
+      target.classList.add('search-target');
+      return () => target.classList.remove('search-target');
+    }
+  }, [state.searchTarget, state.activeTabId, activeDocument]);
+
+  return (
+    <section class="editor-column" aria-label="主工作区">
+      <div class="editor-tabs" role="tablist" aria-label="打开的文档" ref={tabStrip}>
+        {state.editorTabs.map((tab) => (
+          <div
+            key={tab.id}
+            class={`editor-tab${tab.id === state.activeTabId ? ' is-active' : ''}`}
+            onAuxClick={(event) => {
+              if (event.button === 1) dispatch({ type: 'closeTab', tabId: tab.id });
+            }}
+          >
+            <button
+              class="tab-select"
+              role="tab"
+              aria-selected={tab.id === state.activeTabId}
+              title={tab.label}
+              onClick={() => dispatch({ type: 'activateTab', tabId: tab.id })}
+            >
+              <span class="file-type">
+                {tab.kind === 'document' ? 'M↓' : tab.kind === 'experiment' ? 'SQL' : 'i'}
+              </span>
+              <span class="tab-label">{tab.label}</span>
+            </button>
+            <button
+              class="tab-close"
+              title="关闭标签"
+              aria-label={`关闭 ${tab.label}`}
+              onClick={() => dispatch({ type: 'closeTab', tabId: tab.id })}
+            >
+              ×
+            </button>
+          </div>
+        ))}
+      </div>
+      {activeTab && (
+        <div class="editor-toolbar">
+          <div class="breadcrumbs">
+            <span>SQL 基础</span>
+            <span>›</span>
+            <span>
+              {activeTab.kind === 'experiment'
+                ? '实验'
+                : activeTab.kind === 'detail'
+                  ? '详情'
+                  : '章节'}
+            </span>
+            <span>›</span>
+            <strong>{activeTab.label}</strong>
+          </div>
+        </div>
+      )}
+      <article
+        class="editor-reader"
+        ref={reader}
+        onScroll={(event) => {
+          if (restoring.current || !activeTab) return;
+          const element = event.currentTarget;
+          const scrollable = element.scrollHeight - element.clientHeight;
+          dispatch({
+            type: 'recordScroll',
+            tabId: activeTab.id,
+            top: element.scrollTop,
+            progress:
+              activeTab.kind === 'document'
+                ? scrollable <= 1 || element.scrollTop >= scrollable - 2
+                  ? 1
+                  : element.scrollTop / scrollable
+                : undefined
+          });
+        }}
+      >
+        {!activeTab ? (
+          <div class="empty-editor">
+            <span class="empty-brand">LearnLab</span>
+            <p>SQL 基础</p>
+            <button
+              class="link-button"
+              onClick={() => dispatch({ type: 'selectChapter', chapterId: 'basics' })}
+            >
+              打开查询基础
+            </button>
+          </div>
+        ) : activeTab.kind === 'document' ? (
+          <ChapterContent state={state} dispatch={dispatch} />
+        ) : activeTab.kind === 'experiment' ? (
+          <ExperimentContent
+            state={state}
+            dispatch={dispatch}
+            experimentId={activeTab.experimentId!}
+          />
+        ) : (
+          <div class="reader-content">
+            <h1>{activeTab.detail?.title}</h1>
+            <p class="reader-lead">{activeTab.detail?.description}</p>
+            <dl class="detail-properties">
+              {activeTab.detail?.properties.map(([label, value]) => (
+                <div key={label}>
+                  <dt>{label}</dt>
+                  <dd>{value}</dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+        )}
+      </article>
+    </section>
+  );
 }
 
-export function EditorArea({ state, dispatch }: EditorAreaProps) {
-  const activeTab = state.editorTabs.find((tab) => tab.id === state.activeTabId) ?? state.editorTabs[0];
-  const activeChapter = findChapter(chapters, activeTab?.chapterId ?? state.activeChapterId) ?? chapters[0];
-  const content = chapterContent[activeChapter.id] ?? chapterContent.basics;
-  const activeExperiment = experiments.find((experiment) => experiment.id === activeTab?.experimentId);
-
-  return <section class="editor-column">
-    <div class="editor-tabs" role="tablist" aria-label="打开的文档">
-      {state.editorTabs.map((tab) => <button type="button" role="tab" aria-selected={tab.id === state.activeTabId} class={`editor-tab${tab.id === state.activeTabId ? ' is-active' : ''}`} key={tab.id} onClick={() => dispatch({ type: 'activateTab', tabId: tab.id })}><Icon glyph={tab.kind === 'experiment' ? '◇' : '▤'} /><span>{tab.label}</span>{tab.dirty ? <span class="dirty-dot" /> : null}<span class="tab-close" onClick={(event) => { event.stopPropagation(); dispatch({ type: 'closeTab', tabId: tab.id }); }}>×</span></button>)}
-      <button class="new-tab" type="button" title="新建标签" aria-label="新建标签">＋</button>
+function ChapterContent({ state, dispatch }: Props) {
+  const content = state.documents[state.activeChapterId];
+  const currentExperiments = experiments.filter((item) => item.chapterId === state.activeChapterId);
+  return (
+    <div class="reader-content">
+      <h1 data-search-line="1">{content.title}</h1>
+      <p class="reader-lead" data-search-line="2">
+        {content.description}
+      </p>
+      <nav class="reader-outline" aria-label="文档目录">
+        {content.sections.map((section, index) => (
+          <a
+            key={index}
+            href={`#section-${index}`}
+            onClick={(event) => {
+              event.preventDefault();
+              event.currentTarget
+                .closest('.editor-reader')
+                ?.querySelector(`#section-${index}`)
+                ?.scrollIntoView({ block: 'start' });
+            }}
+          >
+            {section.title}
+          </a>
+        ))}
+      </nav>
+      {content.sections.map((section, index) => (
+        <section class="markdown-section" id={`section-${index}`} key={index}>
+          <h2 data-search-line={3 + index * 2}>{section.title}</h2>
+          <p data-search-line={4 + index * 2}>{section.copy}</p>
+          {index === 0 && (
+            <CodeBlock
+              code={content.code}
+              lineOffset={3 + content.sections.length * 2}
+              dispatch={dispatch}
+            />
+          )}
+        </section>
+      ))}
+      {currentExperiments.length > 0 && (
+        <section class="chapter-experiments">
+          <h2>本节实验</h2>
+          {currentExperiments.map((experiment) => (
+            <div class="experiment-link" key={experiment.id}>
+              <div>
+                <strong>{experiment.title}</strong>
+                <small>{experiment.duration} · SQL Runner</small>
+              </div>
+              <button
+                class="primary-button"
+                onClick={() => dispatch({ type: 'openExperiment', experimentId: experiment.id })}
+              >
+                打开实验
+              </button>
+            </div>
+          ))}
+        </section>
+      )}
+      <footer class="reader-footer">
+        {content.eyebrow}
+        <span>SQL 基础</span>
+      </footer>
     </div>
-    <div class="editor-toolbar"><div class="breadcrumbs"><span>SQL 基础</span><Icon glyph="›" /><span>{content.eyebrow.split('·')[1]?.trim() ?? '章节'}</span><Icon glyph="›" /><strong>{activeExperiment?.title ?? activeChapter.documentTitle}</strong></div><div class="editor-actions"><button class="toolbar-icon" type="button" title="分屏（当前未启用）" aria-label="分屏">▥</button><button class="toolbar-icon" type="button" title="更多编辑器操作" aria-label="更多编辑器操作">···</button></div></div>
-    <article class="editor-reader">
-      {activeExperiment ? <ExperimentContent experiment={activeExperiment} state={state} dispatch={dispatch} /> : <ChapterContent content={content} chapter={activeChapter} dispatch={dispatch} />}
-    </article>
-  </section>;
+  );
 }
 
-function ChapterContent({ content, chapter, dispatch }: { content: (typeof chapterContent)[string]; chapter: ReturnType<typeof findChapter>; dispatch: (action: WorkbenchAction) => void }) {
-  const completion = Math.round((chapter?.progress ?? 0) * 100);
-  return <div class="reader-content">
-    <div class="reader-meta"><span class="meta-chip">MARKDOWN</span><span>最近阅读 · 今天 10:24</span><span class="meta-spacer" /><span>{completion}% 已完成</span></div>
-    <div class="reader-heading"><p class="eyebrow">{content.eyebrow}</p><h1>{content.title}</h1><p class="reader-lead">{content.description}</p></div>
-    <div class="reader-outline"><span>本节内容</span>{content.sections.map((section, index) => <a href={`#section-${index + 1}`} key={section.title}>0{index + 1} {section.title}</a>)}</div>
-    {content.sections.map((section, index) => <section class="markdown-section" id={`section-${index + 1}`} key={section.title}><h2><span>{String(index + 1).padStart(2, '0')}</span>{section.title}</h2><p>{section.copy}</p>{index === 0 ? <CodeBlock code={content.code} /> : <div class="reader-callout"><span class="callout-mark">i</span><div><strong>学习提示</strong><p>把鼠标移到实验标题上可以快速打开一个独立标签，不会丢失当前的阅读位置。</p></div></div>}</section>)}
-    <section class="lab-card"><div class="lab-card-head"><div><span class="lab-kicker">INTERACTIVE LAB</span><h3>动手完成一次查询</h3><p>将刚才的语句复制到实验环境中，观察结果集的列和排序。</p></div><span class="lab-status"><span class="status-dot status-dot-green" />可运行</span></div><div class="lab-actions"><button class="primary-button" type="button" onClick={() => dispatch({ type: 'openExperiment', experimentId: 'select-basics' })}><Icon glyph="▶" /> 打开实验</button><span>预计用时 4 分钟</span></div></section>
-    <div class="reader-footer"><span>上次阅读到 {completion}%</span><span>滚动到底部即视为完成</span></div>
-  </div>;
+const tasks: Record<string, string> = {
+  'select-basics': '查询所有学生的姓名和成绩，并按照成绩从高到低排序。不要修改原始数据。',
+  'where-filter': '筛选成绩不低于 60 分的学生，返回学生姓名和成绩。',
+  'join-report': '连接学生与课程表，返回每位学生的姓名及其课程名称。'
+};
+
+function ExperimentContent({ state, dispatch, experimentId }: Props & { experimentId: string }) {
+  const experiment = experiments.find((item) => item.id === experimentId)!;
+  const status = state.experimentStatus[experimentId];
+  const history = state.experimentHistory.filter((item) => item.experimentId === experimentId);
+  return (
+    <div class="reader-content experiment-content">
+      <div class="view-metadata">
+        <span>{findChapter(chapters, experiment.chapterId)?.label}</span>
+        <span>模拟运行 · {experiment.duration}</span>
+      </div>
+      <h1>{experiment.title}</h1>
+      <h2>任务</h2>
+      <p>{tasks[experiment.id]}</p>
+      <CodeBlock code={state.documents[experiment.chapterId].code} dispatch={dispatch} />
+      <div class="run-actions">
+        <span class={`run-state ${status === 'passed' ? 'is-passed' : ''}`}>
+          {status === 'running' ? '运行中…' : status === 'passed' ? '已通过' : '尚未运行'}
+        </span>
+        <button
+          class="primary-button"
+          disabled={status === 'running'}
+          onClick={() => dispatch({ type: 'runExperiment', experimentId })}
+        >
+          {status === 'running' ? '正在运行' : '运行实验'}
+        </button>
+      </div>
+      <section class="history-preview">
+        <div class="panel-subheading">
+          <h2>实验历史</h2>
+          <button
+            class="link-button"
+            onClick={() => dispatch({ type: 'setBottomPanel', panel: 'history' })}
+          >
+            查看全部
+          </button>
+        </div>
+        {!history.length && <p class="empty-copy">暂无本次会话的运行记录</p>}
+        {history.map((item) => (
+          <div class="history-item" key={item.id}>
+            <span class="status-dot status-dot-green" />
+            <time>{new Date(item.completedAt).toLocaleTimeString()}</time>
+            <strong>通过</strong>
+            <span>{item.output}</span>
+          </div>
+        ))}
+      </section>
+    </div>
+  );
 }
 
-function ExperimentContent({ experiment, state, dispatch }: { experiment: (typeof experiments)[number]; state: WorkbenchState; dispatch: (action: WorkbenchAction) => void }) {
-  const status = state.experimentStatus[experiment.id];
-  return <div class="reader-content experiment-content"><div class="reader-meta"><span class="meta-chip meta-chip-purple">EXPERIMENT</span><span>实验历史 · 3 次运行</span><span class="meta-spacer" /><span>{experiment.duration}</span></div><div class="reader-heading"><p class="eyebrow">{experiment.chapterId === 'basics' ? '第 1 章 · 查询基础' : '第 2 章 · 条件过滤'}</p><h1>{experiment.title}</h1><p class="reader-lead">在隔离的实验环境中完成任务，系统会保留本次运行的输出、错误和通过结果。</p></div><div class="experiment-task"><div class="task-number">01</div><div><h2>任务说明</h2><p>查询所有学生的姓名和成绩，并按照成绩从高到低排序。不要修改原始数据。</p></div></div><CodeBlock code={experiment.id === 'select-basics' ? 'SELECT name, score\nFROM students\nORDER BY score DESC;' : 'SELECT name, score\nFROM students\nWHERE score >= 60;'} /><div class="run-card"><div><span class={`run-state ${status === 'passed' ? 'is-passed' : status === 'running' ? 'is-running' : ''}`}>{status === 'passed' ? '✓ 已通过' : status === 'running' ? '◌ 运行中' : '○ 尚未运行'}</span><p>{status === 'passed' ? '输出与预期结果一致。你可以继续阅读下一节。' : '运行代码后，实验结果会记录到当前实验历史。'}</p></div><button class="primary-button" type="button" disabled={status === 'running'} onClick={() => dispatch({ type: 'runExperiment', experimentId: experiment.id })}><Icon glyph="▶" />{status === 'running' ? '正在运行' : '运行实验'}</button></div><div class="history-preview"><div class="panel-subheading"><strong>实验历史</strong><button class="link-button" type="button" onClick={() => dispatch({ type: 'setBottomPanel', panel: 'history' })}>在底部面板中查看</button></div><div class="history-item"><span class="status-dot status-dot-green" /><span>今天 10:18</span><strong>通过</strong><span class="meta-spacer" />4.2s</div><div class="history-item"><span class="status-dot status-dot-red" /><span>昨天 18:40</span><strong class="muted-text">失败</strong><span class="meta-spacer" />3.8s</div></div></div>;
-}
-
-function CodeBlock({ code }: { code: string }) {
-  const lines = code.split('\n');
-  return <div class="code-block"><div class="code-header"><span><span class="code-dot red" /><span class="code-dot yellow" /><span class="code-dot green" /></span><span>query.sql</span><span class="meta-spacer" /><button class="code-copy" type="button" title="复制代码" aria-label="复制代码">□</button></div><pre>{lines.map((line, index) => <code key={`${line}-${index}`}><span class="line-number">{String(index + 1).padStart(2, '0')}</span><span class="code-text">{highlightSql(line)}</span>{'\n'}</code>)}</pre></div>;
-}
-
-function highlightSql(line: string) {
-  const parts = line.split(/(SELECT|FROM|WHERE|ORDER BY|GROUP BY|INNER JOIN|ON|AS|DESC|ASC)/g);
-  return parts.map((part, index) => /^(SELECT|FROM|WHERE|ORDER BY|GROUP BY|INNER JOIN|ON|AS|DESC|ASC)$/.test(part) ? <span class="syntax-keyword" key={`${part}-${index}`}>{part}</span> : part);
+function CodeBlock({
+  code,
+  dispatch,
+  lineOffset
+}: {
+  code: string;
+  dispatch: Props['dispatch'];
+  lineOffset?: number;
+}) {
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(code);
+      dispatch({
+        type: 'addNotification',
+        notification: {
+          id: 'copy',
+          level: 'info',
+          title: '已复制代码',
+          message: '代码已写入剪贴板。'
+        }
+      });
+    } catch {
+      dispatch({
+        type: 'addNotification',
+        notification: {
+          id: 'copy-error',
+          level: 'error',
+          title: '复制失败',
+          message: '无法访问剪贴板，请检查浏览器权限。'
+        }
+      });
+    }
+  };
+  return (
+    <div class="code-block">
+      <div class="code-header">
+        <span>query.sql</span>
+        <button class="code-copy" title="复制代码" aria-label="复制代码" onClick={copy}>
+          复制
+        </button>
+      </div>
+      <pre>
+        {code.split('\n').map((line, index) => (
+          <code
+            key={index}
+            data-search-line={lineOffset === undefined ? undefined : lineOffset + index}
+          >
+            <span class="line-number">{index + 1}</span>
+            <span class="code-text">
+              {line
+                .split(/(SELECT|FROM|WHERE|ORDER BY|GROUP BY|INNER JOIN|ON|AS|DESC|ASC)/g)
+                .map((part, i) =>
+                  /^(SELECT|FROM|WHERE|ORDER BY|GROUP BY|INNER JOIN|ON|AS|DESC|ASC)$/.test(part) ? (
+                    <span class="syntax-keyword" key={i}>
+                      {part}
+                    </span>
+                  ) : (
+                    part
+                  )
+                )}
+            </span>
+          </code>
+        ))}
+      </pre>
+    </div>
+  );
 }

@@ -1,11 +1,26 @@
-export const chapterContent: Record<string, { eyebrow: string; title: string; description: string; sections: Array<{ title: string; copy: string }>; code: string }> = {
+export interface TutorialContent {
+  eyebrow: string;
+  title: string;
+  description: string;
+  sections: Array<{ title: string; copy: string }>;
+  code: string;
+}
+
+export const chapterContent: Record<string, TutorialContent> = {
   basics: {
     eyebrow: '第 1 章 · 查询基础',
     title: '用 SELECT 读懂一张表',
-    description: '从最小的查询开始，理解列、表达式和结果集。完成本章后，你可以读出一张表中真正需要的信息。',
+    description:
+      '从最小的查询开始，理解列、表达式和结果集。完成本章后，你可以读出一张表中真正需要的信息。',
     sections: [
-      { title: '选择你需要的列', copy: 'SELECT 语句的第一部分描述结果中应该出现哪些列。先从明确的列名开始，而不是依赖通配符。' },
-      { title: '让结果可被验证', copy: '将查询写得短一些、清晰一些。运行实验后，结果集会显示在实验历史中，方便你回看。' }
+      {
+        title: '选择你需要的列',
+        copy: 'SELECT 语句的第一部分描述结果中应该出现哪些列。先从明确的列名开始，而不是依赖通配符。'
+      },
+      {
+        title: '让结果可被验证',
+        copy: '将查询写得短一些、清晰一些。运行实验后，结果集会显示在实验历史中，方便你回看。'
+      }
     ],
     code: 'SELECT name, score\nFROM students\nORDER BY score DESC;'
   },
@@ -15,7 +30,10 @@ export const chapterContent: Record<string, { eyebrow: string; title: string; de
     description: 'WHERE 会把“所有记录”收敛成“符合条件的记录”。这一章将从比较、组合条件开始。',
     sections: [
       { title: '先写出条件', copy: '条件过滤的关键是把自然语言问题改写成一个可以验证的表达式。' },
-      { title: '再观察边界', copy: '等于、大于、小于以及 NULL 都有自己的语义，实验会帮助你看见差异。' }
+      {
+        title: '再观察边界',
+        copy: '等于、大于、小于以及 NULL 都有自己的语义，实验会帮助你看见差异。'
+      }
     ],
     code: 'SELECT name, score\nFROM students\nWHERE score >= 60;'
   },
@@ -42,15 +60,53 @@ export const chapterContent: Record<string, { eyebrow: string; title: string; de
 };
 
 export const pluginItems = [
-  { id: 'sql-runner', name: 'SQL Runner', description: '在实验包沙箱中运行 SQL 查询', version: '1.4.2', state: '已加载', glyph: 'DB', color: 'blue' },
-  { id: 'markdown-tools', name: 'Markdown Tools', description: '提供章节解析和目录导航', version: '0.8.1', state: '已加载', glyph: 'MD', color: 'purple' },
-  { id: 'ai-lab', name: 'AI Lab Assistant', description: '在右侧辅助栏中提供学习提示', version: '0.6.0', state: '已加载', glyph: 'AI', color: 'orange' },
-  { id: 'mysql-client', name: 'MySQL Client', description: '可选的外部客户端适配器', version: '0.3.0', state: '未配置', glyph: 'MY', color: 'teal' }
+  {
+    id: 'sql-runner',
+    name: 'SQL Runner',
+    description: '在实验包沙箱中运行 SQL 查询',
+    version: '1.4.2',
+    state: '已加载',
+    glyph: 'DB',
+    color: 'blue'
+  },
+  {
+    id: 'markdown-tools',
+    name: 'Markdown Tools',
+    description: '提供章节解析和目录导航',
+    version: '0.8.1',
+    state: '已加载',
+    glyph: 'MD',
+    color: 'purple'
+  },
+  {
+    id: 'ai-lab',
+    name: 'AI Lab Assistant',
+    description: '在右侧辅助栏中提供学习提示',
+    version: '0.6.0',
+    state: '已加载',
+    glyph: 'AI',
+    color: 'orange'
+  },
+  {
+    id: 'mysql-client',
+    name: 'MySQL Client',
+    description: '可选的外部客户端适配器',
+    version: '0.3.0',
+    state: '未配置',
+    glyph: 'MY',
+    color: 'teal'
+  }
 ];
 
 export const dependencyItems = [
   { name: 'SQLite 3', version: '3.45.1', kind: '独立运行时', status: '就绪', size: '4.8 MB' },
-  { name: 'SQL Runner Runtime', version: '1.4.2', kind: '插件运行时', status: '就绪', size: '18.2 MB' },
+  {
+    name: 'SQL Runner Runtime',
+    version: '1.4.2',
+    kind: '插件运行时',
+    status: '就绪',
+    size: '18.2 MB'
+  },
   { name: 'MySQL Client', version: '8.x', kind: '外部软件', status: '未安装', size: '由用户管理' }
 ];
 

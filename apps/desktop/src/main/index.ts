@@ -1,10 +1,11 @@
 import { app, BrowserWindow, ipcMain } from 'electron';
 import { join } from 'node:path';
-import { loadPackage, readChapter } from '@learnlab/core';
+import { calculateContentFingerprint, loadPackage, readChapter } from '@learnlab/core';
 import { registerWorkspaceIpc } from './ipc/workspace.ipc';
 import { registerDependencyIpc } from './ipc/dependency.ipc';
 import { registerDatabaseIpc } from './ipc/database.ipc';
 import { registerConfigIpc } from './ipc/config.ipc';
+import { registerPackageIpc } from './ipc/package.ipc';
 import { DesktopDatabaseService } from './services/database';
 import {
   assertTrustedPackage,
@@ -92,17 +93,21 @@ if (!gotSingleInstanceLock) {
       if (result.ok) rememberPackage(result.value.dir);
       return result;
     });
-    ipcMain.handle('package:read-chapter', (event, packageDir: string, chapterFile: string) => {
+    ipcMain.handle('package:read-chapter', async (event, packageDir: string, chapterFile: string) => {
       assertTrustedRenderer(event);
-      return readChapter(
+      const result = await readChapter(
         assertTrustedPackage(packageDir),
         requireNonEmptyString(chapterFile, 'chapterFile')
       );
+      if (!result.ok) return result;
+      const contentHash = calculateContentFingerprint(result.value);
+      return { ok: true, value: result.value, contentHash };
     });
     registerWorkspaceIpc();
     registerDependencyIpc();
     registerDatabaseIpc();
     registerConfigIpc();
+    registerPackageIpc();
 
     ensureMainWindow();
     app.on('activate', () => ensureMainWindow());

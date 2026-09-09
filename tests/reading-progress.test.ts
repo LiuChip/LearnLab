@@ -183,3 +183,62 @@ it('normalizes invalid progress values instead of persisting NaN or infinity', a
     db.close();
   }
 });
+
+it('verifies reading progress lifecycle and recovery with fixture of more than 2 chapters', async () => {
+  const { PackageDatabase } = await import('../packages/core/src/database/package-db');
+  const { createDatabaseConnection } = await import('../packages/core/src/database/driver');
+  const { syncChapterProgress, markChapterCompleted } = await import('../packages/core/src/reading-progress');
+  const { calculateContentFingerprint } = await import('../packages/core/src/content-fingerprint');
+  const { buildChapterNavigationList } = await import('../packages/core/src/chapter-navigation');
+
+  const db = new PackageDatabase(createDatabaseConnection(':memory:'));
+  try {
+    const chaptersFixture = [
+      { id: 'ch1', title: 'Chapter 1: Intro', file: '01.md', experiment_count: 1 },
+      { id: 'ch2', title: 'Chapter 2: Querying', file: '02.md', experiment_count: 3 },
+      { id: 'ch3', title: 'Chapter 3: Joins', file: '03.md', experiment_count: 2 },
+      { id: 'ch4', title: 'Chapter 4: Aggregations', file: '04.md', experiment_count: 0 }
+    ];
+    const manifest = {
+      id: 'multi.ch.pkg',
+      version: '1.0.0',
+      name: 'Multi Chapter Course',
+      author: 'Author',
+      chapters: chaptersFixture
+    };
+
+    const hash1 = calculateContentFingerprint('# Ch 1 content');
+    const hash2 = calculateContentFingerprint('# Ch 2 content');
+    const hash3 = calculateContentFingerprint('# Ch 3 content');
+
+    // 1. Read Ch1 to 50%
+    syncChapterProgress(db, 'ch1', hash1, { scrollY: 150, progressPercent: 50 });
+    // 2. Read Ch2 to bottom -> 100% completed
+    syncChapterProgress(db, 'ch2', hash2, { scrollY: 600, progressPercent: 100 });
+    // 3. Mark Ch3 completed explicitly
+    markChapterCompleted(db, 'ch3', hash3);
+    // Ch4 remains untouched
+
+    // Build navigation list
+    const allProgress = db.getAllReadingProgress();
+    const navList = buildChapterNavigationList(manifest, allProgress);
+
+    expect(navList.length).toBe(4);
+    expect(navList[0]).toMatchObject({ id: 'ch1', orderIndex: 1, experimentCount: 1, completed: false, progressPercent: 50 });
+    expect(navList[1]).toMatchObject({ id: 'ch2', orderIndex: 2, experimentCount: 3, completed: true, progressPercent: 100 });
+    expect(navList[2]).toMatchObject({ id: 'ch3', orderIndex: 3, experimentCount: 2, completed: true, progressPercent: 100 });
+    expect(navList[3]).toMatchObject({ id: 'ch4', orderIndex: 4, experimentCount: 0, completed: false, progressPercent: 0 });
+
+    // 4. Content of Ch2 is modified: hash changes
+    const hash2Modified = calculateContentFingerprint('# Ch 2 content (revised)');
+    const reopenedCh2 = syncChapterProgress(db, 'ch2', hash2Modified);
+    expect(reopenedCh2.completed).toBe(false);
+    expect(reopenedCh2.progressPercent).toBe(0);
+
+    // Ch1 and Ch3 remain intact
+    expect(db.getReadingProgress('ch1')?.progressPercent).toBe(50);
+    expect(db.getReadingProgress('ch3')?.completed).toBe(true);
+  } finally {
+    db.close();
+  }
+});

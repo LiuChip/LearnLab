@@ -50,6 +50,23 @@ function readBoolean(
   return typeof value === 'boolean' ? value : undefined;
 }
 
+function readNonNegativeInteger(
+  value: unknown,
+  path: string,
+  errors: ValidationError[],
+  required = false
+): number | undefined {
+  if (value === undefined || value === null) {
+    if (required) errors.push({ path, message: `Missing required field: ${path}` });
+    return undefined;
+  }
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < 0) {
+    errors.push({ path, message: `${path} must be a non-negative integer` });
+    return undefined;
+  }
+  return value;
+}
+
 function validatePluginRequirement(
   value: unknown,
   path: string,
@@ -76,7 +93,19 @@ function validateChapter(
   const id = readString(value.id, `${path}.id`, errors);
   const title = readString(value.title, `${path}.title`, errors);
   const file = readString(value.file, `${path}.file`, errors);
-  return id && title && file ? { id, title, file } : undefined;
+  const experiment_count = readNonNegativeInteger(
+    value.experiment_count,
+    `${path}.experiment_count`,
+    errors,
+    false
+  );
+  if (!id || !title || !file) return undefined;
+  return {
+    id,
+    title,
+    file,
+    ...(experiment_count !== undefined ? { experiment_count } : {})
+  };
 }
 
 function validateRuntimeDependency(
@@ -210,6 +239,12 @@ export function validateManifest(raw: unknown): Result<PackageManifest, Validati
       : readString(raw.description, 'description', errors, false);
   const license =
     raw.license === undefined ? undefined : readString(raw.license, 'license', errors, false);
+  const experiment_count = readNonNegativeInteger(
+    raw.experiment_count,
+    'experiment_count',
+    errors,
+    false
+  );
 
   const chapters: ChapterEntry[] = [];
   if (!Array.isArray(raw.chapters)) {
@@ -275,6 +310,7 @@ export function validateManifest(raw: unknown): Result<PackageManifest, Validati
       chapters,
       ...(description ? { description } : {}),
       ...(license ? { license } : {}),
+      ...(experiment_count !== undefined ? { experiment_count } : {}),
       ...(required_plugins.length ? { required_plugins } : {}),
       ...(runtime_dependencies.length ? { runtime_dependencies } : {}),
       ...(external_prerequisites.length ? { external_prerequisites } : {})
