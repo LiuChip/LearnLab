@@ -107,12 +107,7 @@ export function App() {
                 <button
                   type="button"
                   class={`option-btn ${store.searchOptions.caseSensitive ? 'is-active' : ''}`}
-                  onClick={() =>
-                    store.setSearchOptions((prev) => ({
-                      ...prev,
-                      caseSensitive: !prev.caseSensitive
-                    }))
-                  }
+                  onClick={() => store.toggleSearchOption('caseSensitive')}
                   title="区分大小写 (Aa)"
                 >
                   Aa
@@ -120,12 +115,7 @@ export function App() {
                 <button
                   type="button"
                   class={`option-btn ${store.searchOptions.wholeWord ? 'is-active' : ''}`}
-                  onClick={() =>
-                    store.setSearchOptions((prev) => ({
-                      ...prev,
-                      wholeWord: !prev.wholeWord
-                    }))
-                  }
+                  onClick={() => store.toggleSearchOption('wholeWord')}
                   title="全字匹配 (\b)"
                 >
                   \b
@@ -133,12 +123,7 @@ export function App() {
                 <button
                   type="button"
                   class={`option-btn ${store.searchOptions.isRegex ? 'is-active' : ''}`}
-                  onClick={() =>
-                    store.setSearchOptions((prev) => ({
-                      ...prev,
-                      isRegex: !prev.isRegex
-                    }))
-                  }
+                  onClick={() => store.toggleSearchOption('isRegex')}
                   title="正则表达式 (.*)"
                 >
                   .*

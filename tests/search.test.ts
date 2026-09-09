@@ -119,6 +119,16 @@ SELECT * FROM orders;
     expect(compiled.error).toContain('unsafe nested quantifiers');
     expect(compiled.regex).toBeUndefined();
 
+    const redosCurly = '(a+){2,}';
+    const compiledCurly = compileSearchPattern({ query: redosCurly, isRegex: true });
+    expect(compiledCurly.error).toContain('unsafe nested quantifiers');
+
+    // Literal escaped parentheses should not be falsely rejected
+    const safeEscaped = '\\(\\d+\\)+';
+    const compiledSafe = compileSearchPattern({ query: safeEscaped, isRegex: true });
+    expect(compiledSafe.error).toBeUndefined();
+    expect(compiledSafe.regex).toBeDefined();
+
     const longQuery = 'a'.repeat(350);
     const compiledLong = compileSearchPattern({ query: longQuery, isRegex: true });
     expect(compiledLong.error).toContain('too long');

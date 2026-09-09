@@ -9,6 +9,7 @@ export interface ChapterNavigationItem {
   progressPercent: number;
   completed: boolean;
   completedAt?: string;
+  scrollY?: number;
 }
 
 export interface ScrollProgressResult {

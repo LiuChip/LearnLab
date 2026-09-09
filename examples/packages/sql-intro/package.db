@@ -1,0 +1,96 @@
+{
+  "schema_migrations": {
+    "columns": [
+      "version",
+      "applied_at"
+    ],
+    "primaryKeys": [
+      "version"
+    ],
+    "rows": [
+      {
+        "version": 1,
+        "applied_at": "2026-09-09T17:12:37.155Z"
+      }
+    ]
+  },
+  "chapters": {
+    "columns": [
+      "chapter_id",
+      "relative_path",
+      "content_hash",
+      "order_index"
+    ],
+    "primaryKeys": [
+      "chapter_id"
+    ],
+    "rows": []
+  },
+  "reading_progress": {
+    "columns": [
+      "chapter_id",
+      "scroll_y",
+      "progress_percent",
+      "completed",
+      "completed_at",
+      "content_hash",
+      "updated_at"
+    ],
+    "primaryKeys": [
+      "chapter_id"
+    ],
+    "rows": [
+      {
+        "chapter_id": "01-select",
+        "scroll_y": 0,
+        "progress_percent": 0,
+        "completed": 0,
+        "completed_at": null,
+        "content_hash": "e9ec9278ee58b1664dbe6acc6dbcf9857bd4af2156e891266ce47b532a48b9f2",
+        "updated_at": "2026-09-09T17:12:47.151Z"
+      },
+      {
+        "chapter_id": "02-where",
+        "scroll_y": 404.5,
+        "progress_percent": 100,
+        "completed": 1,
+        "completed_at": "2026-09-09T17:12:41.653Z",
+        "content_hash": "335295da954fcd61e9c13a1f6f60b8aed272d0149e44eb34c81d9e4f769a92ab",
+        "updated_at": "2026-09-09T17:12:43.102Z"
+      }
+    ]
+  },
+  "labs": {
+    "columns": [
+      "lab_id",
+      "chapter_id",
+      "status",
+      "attempt_count",
+      "last_attempt_at"
+    ],
+    "primaryKeys": [
+      "lab_id"
+    ],
+    "rows": []
+  },
+  "package_metadata": {
+    "columns": [
+      "key",
+      "value"
+    ],
+    "primaryKeys": [
+      "key"
+    ],
+    "rows": []
+  },
+  "sessions": {
+    "columns": [
+      "key",
+      "value"
+    ],
+    "primaryKeys": [
+      "key"
+    ],
+    "rows": []
+  }
+}

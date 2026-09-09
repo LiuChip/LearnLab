@@ -54,6 +54,7 @@ describe('chapter navigation and reading utilities', () => {
     expect(list[0].experimentCount).toBe(2);
     expect(list[0].completed).toBe(true);
     expect(list[0].progressPercent).toBe(100);
+    expect(list[0].scrollY).toBe(200);
 
     // Ch2: orderIndex 2, experimentCount 3, completed false
     expect(list[1].id).toBe('02');
@@ -61,6 +62,7 @@ describe('chapter navigation and reading utilities', () => {
     expect(list[1].experimentCount).toBe(3);
     expect(list[1].completed).toBe(false);
     expect(list[1].progressPercent).toBe(45);
+    expect(list[1].scrollY).toBe(100);
 
     // Ch3: default experimentCount 0 when omitted, unvisited
     expect(list[2].id).toBe('03');
@@ -68,6 +70,7 @@ describe('chapter navigation and reading utilities', () => {
     expect(list[2].experimentCount).toBe(0);
     expect(list[2].completed).toBe(false);
     expect(list[2].progressPercent).toBe(0);
+    expect(list[2].scrollY).toBe(0);
   });
 
   it('determines next and previous chapters correctly', () => {

@@ -44,6 +44,12 @@ describe('reading progress and experiment history separation', () => {
       const completed = markChapterCompleted(db, 'ch1', hash1);
       expect(completed.completed).toBe(true);
       expect(completed.progressPercent).toBe(100);
+
+      // 6. Scrolling back within an already completed chapter preserves completed=true and 100%
+      const scrolledBack = syncChapterProgress(db, 'ch1', hash1, { scrollY: 150, progressPercent: 30 });
+      expect(scrolledBack.completed).toBe(true);
+      expect(scrolledBack.progressPercent).toBe(100);
+      expect(scrolledBack.scrollY).toBe(150);
     } finally {
       db.close();
     }

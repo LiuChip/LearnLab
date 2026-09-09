@@ -14,6 +14,7 @@ export interface ChapterNavigationItem {
   progressPercent: number;
   completed: boolean;
   completedAt?: string;
+  scrollY?: number;
 }
 
 export interface ScrollProgressResult {
@@ -52,7 +53,8 @@ export function buildChapterNavigationList(
       experimentCount,
       progressPercent: record?.progressPercent ?? 0,
       completed: record?.completed ?? false,
-      completedAt: record?.completedAt
+      completedAt: record?.completedAt,
+      scrollY: record?.scrollY ?? 0
     };
   });
 }

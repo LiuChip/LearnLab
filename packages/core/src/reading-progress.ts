@@ -35,7 +35,11 @@ export function syncChapterProgress(db: PackageDatabase, chapterId: string, curr
     if (update?.scrollY !== undefined) scrollY = finiteNonNegative(update.scrollY);
     if (update?.progressPercent !== undefined) {
       progressPercent = normalizedPercent(update.progressPercent);
-      if (progressPercent >= 100) { completed = true; completedAt = completedAt || now; }
+      if (progressPercent >= 100 || (completed && update?.completed !== false)) {
+        completed = true;
+        completedAt = completedAt || now;
+        progressPercent = 100;
+      }
     }
     if (update?.completed !== undefined) {
       completed = update.completed;

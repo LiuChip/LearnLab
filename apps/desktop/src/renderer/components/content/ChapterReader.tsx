@@ -34,6 +34,20 @@ export function ChapterReader({
   onScrollChange
 }: ChapterReaderProps) {
   const contentRef = useRef<HTMLDivElement>(null);
+  const articleRef = useRef<HTMLElement>(null);
+  const prevChapterIdRef = useRef<string | null>(null);
+  const isProgrammaticScrollRef = useRef(false);
+
+  // Restore scroll position when chapter finishes loading or changes
+  useEffect(() => {
+    if (!articleRef.current || !activeChapter || isLoading) return;
+
+    if (prevChapterIdRef.current !== activeChapter.id) {
+      prevChapterIdRef.current = activeChapter.id;
+      isProgrammaticScrollRef.current = true;
+      articleRef.current.scrollTop = activeChapter.scrollY ?? 0;
+    }
+  }, [activeChapter?.id, activeChapter?.scrollY, isLoading]);
 
   // Attach copy buttons to rendered code blocks
   useEffect(() => {
@@ -41,7 +55,7 @@ export function ChapterReader({
     const preElements = contentRef.current.querySelectorAll('pre');
 
     preElements.forEach((pre, index) => {
-      const codeId = `code-block-${index}`;
+      const codeId = `${activeChapter?.id ?? 'ch'}-code-${index}`;
       let header = pre.previousElementSibling as HTMLElement | null;
       if (!header || !header.classList.contains('code-block-header')) {
         header = document.createElement('div');
@@ -59,7 +73,7 @@ export function ChapterReader({
         copyBtn.setAttribute('data-code-id', codeId);
         copyBtn.textContent = '复制代码';
         copyBtn.onclick = () => {
-          const textToCopy = pre.textContent || '';
+          const textToCopy = (codeElement?.textContent || pre.textContent || '').replace(/\r\n/g, '\n');
           onCopyCode(textToCopy, codeId);
         };
 
@@ -69,6 +83,11 @@ export function ChapterReader({
       } else {
         const copyBtn = header.querySelector('.code-copy-btn') as HTMLButtonElement | null;
         if (copyBtn) {
+          const codeElement = pre.querySelector('code');
+          copyBtn.onclick = () => {
+            const textToCopy = (codeElement?.textContent || pre.textContent || '').replace(/\r\n/g, '\n');
+            onCopyCode(textToCopy, codeId);
+          };
           if (copyStatus?.id === codeId) {
             if (copyStatus.status === 'copied') {
               copyBtn.textContent = '已复制 √';
@@ -84,9 +103,13 @@ export function ChapterReader({
         }
       }
     });
-  }, [markdown?.html, copyStatus, onCopyCode]);
+  }, [markdown?.html, isLoading, copyStatus, onCopyCode, activeChapter?.id]);
 
   const handleScroll = (event: Event) => {
+    if (isProgrammaticScrollRef.current) {
+      isProgrammaticScrollRef.current = false;
+      return;
+    }
     const el = event.currentTarget as HTMLElement;
     if (el) {
       onScrollChange(el.scrollTop, el.scrollHeight, el.clientHeight);
@@ -95,6 +118,7 @@ export function ChapterReader({
 
   return (
     <article
+      ref={articleRef}
       class="chapter-reader"
       onScroll={handleScroll}
       tabIndex={0}

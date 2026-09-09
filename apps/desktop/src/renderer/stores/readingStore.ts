@@ -52,6 +52,7 @@ export function useReadingStore() {
 
   const activePackageDirRef = useRef<string | null>(null);
   activePackageDirRef.current = packageDir;
+  const activeLoadingChapterIdRef = useRef<string | null>(null);
 
   const refreshChapters = useCallback(async (pkgDir: string) => {
     try {
@@ -64,6 +65,7 @@ export function useReadingStore() {
 
   const loadPackageByPath = useCallback(
     async (dir: string, preferredChapterId?: string) => {
+      activePackageDirRef.current = dir;
       setIsLoading(true);
       setError(null);
       setPackageDir(dir);
@@ -138,12 +140,14 @@ export function useReadingStore() {
       const target = chapters.find((c) => c.id === chapterId);
       if (!target) return;
 
+      activeLoadingChapterIdRef.current = chapterId;
       setIsLoading(true);
       setError(null);
       setActiveChapterId(chapterId);
 
       try {
         const readResult = await window.learnlab.readChapter(currentDir, target.file);
+        if (activeLoadingChapterIdRef.current !== chapterId) return;
         if (!readResult.ok) {
           setError({ type: readResult.error.type, message: readResult.error.message });
           setIsLoading(false);
@@ -154,17 +158,23 @@ export function useReadingStore() {
         setContentHash(hash);
 
         await window.learnlab.database.saveReadingProgress(currentDir, target.id, hash);
+        if (activeLoadingChapterIdRef.current !== chapterId) return;
+
         const parsed = await parseMarkdown(readResult.value);
+        if (activeLoadingChapterIdRef.current !== chapterId) return;
         setMarkdown(parsed);
 
         await refreshChapters(currentDir);
       } catch (cause) {
+        if (activeLoadingChapterIdRef.current !== chapterId) return;
         setError({
           type: 'read_error',
           message: cause instanceof Error ? cause.message : String(cause)
         });
       } finally {
-        setIsLoading(false);
+        if (activeLoadingChapterIdRef.current === chapterId) {
+          setIsLoading(false);
+        }
       }
     },
     [chapters, refreshChapters]
@@ -190,11 +200,21 @@ export function useReadingStore() {
       if (!currentDir || !activeChapterId || !contentHash) return;
 
       const calc = calculateScrollProgress(scrollTop, scrollHeight, clientHeight);
-      if (calc.isAtBottom || Math.abs((activeChapter?.progressPercent ?? 0) - calc.progressPercent) >= 5) {
+      const isAlreadyCompleted = activeChapter?.completed ?? false;
+      const isCompleted = isAlreadyCompleted || calc.isAtBottom;
+      const newPercent = isCompleted ? 100 : Math.max(activeChapter?.progressPercent ?? 0, calc.progressPercent);
+
+      const prevScrollY = activeChapter?.scrollY ?? 0;
+      const shouldUpdate =
+        calc.isAtBottom ||
+        Math.abs(newPercent - (activeChapter?.progressPercent ?? 0)) >= 1 ||
+        Math.abs(calc.scrollY - prevScrollY) >= 50;
+
+      if (shouldUpdate) {
         await window.learnlab.database.saveReadingProgress(currentDir, activeChapterId, contentHash, {
           scrollY: calc.scrollY,
-          progressPercent: calc.progressPercent,
-          completed: calc.isAtBottom
+          progressPercent: newPercent,
+          completed: isCompleted ? true : undefined
         });
         await refreshChapters(currentDir);
       }
@@ -210,7 +230,7 @@ export function useReadingStore() {
       await window.learnlab.database.saveReadingProgress(currentDir, activeChapterId, contentHash, {
         completed,
         progressPercent: completed ? 100 : 0,
-        scrollY: completed ? (activeChapter?.progressPercent ?? 100) : 0
+        scrollY: completed ? (activeChapter?.scrollY ?? 0) : 0
       });
       await refreshChapters(currentDir);
     },
@@ -246,6 +266,19 @@ export function useReadingStore() {
       }
     },
     [searchOptions]
+  );
+
+  const toggleSearchOption = useCallback(
+    (key: 'caseSensitive' | 'wholeWord' | 'isRegex') => {
+      setSearchOptions((prev) => {
+        const next = { ...prev, [key]: !prev[key] };
+        if (searchQuery.trim() && searchResults) {
+          void runSearch(searchQuery, next);
+        }
+        return next;
+      });
+    },
+    [searchQuery, searchResults, runSearch]
   );
 
   const clearSearch = useCallback(() => {
@@ -310,6 +343,7 @@ export function useReadingStore() {
     updateScroll,
     toggleCompleted,
     runSearch,
+    toggleSearchOption,
     clearSearch,
     copyCodeToClipboard
   };

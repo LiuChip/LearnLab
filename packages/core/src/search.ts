@@ -60,10 +60,11 @@ function escapeRegex(value: string): string {
 
 /**
  * Basic heuristic check to prevent obvious catastrophic backtracking patterns.
+ * Distinguishes unescaped groups with nested quantifiers like (a+)+, (.*)*, (a+){2,}
+ * from escaped literal parentheses like \(\d+\)+.
  */
 function hasCatastrophicBacktracking(pattern: string): boolean {
-  // Checks for nested quantifiers like (a+)+, (.*)*, ([a-z]+)+
-  return /(\([^)]*[+*]\)[+*])|(\[[^\]]*\][+*][+*])/.test(pattern);
+  return /(?<!\\)\((?:[^)\\]|\\.)*[+*](?<!\\)\)(?:[+*]|\{\d+,?\d*\})|(?<!\\)\[(?:[^\]\\]|\\.)*\][+*]{2,}/.test(pattern);
 }
 
 export function compileSearchPattern(options: SearchOptions): { regex?: RegExp; error?: string } {
