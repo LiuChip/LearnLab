@@ -215,8 +215,8 @@ chapters:
     );
 
     const registered: RegisteredPackage[] = [
-      { id: 'pkg1', name: 'Package 1', path: pkg1, isSymlink: false, registeredAt: '' },
-      { id: 'pkg2', name: 'Package 2', path: pkg2, isSymlink: false, registeredAt: '' }
+      { id: 'pkg1', name: 'Package 1', version: '1.0.0', path: pkg1, isSymlink: false, registeredAt: '' },
+      { id: 'pkg2', name: 'Package 2', version: '1.0.0', path: pkg2, isSymlink: false, registeredAt: '' }
     ];
 
     const result = await searchWorkspace(registered, { query: 'indexing' });
