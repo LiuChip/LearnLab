@@ -16,6 +16,21 @@ includes minimal experimental context types and a pure-logic permission resolver
 It does not yet load or execute plugin code. The context types and permission
 resolver are not runtime authorization mechanisms and are not a stable SDK.
 
+## Stability labels
+
+This document distinguishes three kinds of API:
+
+| Label | Meaning |
+| --- | --- |
+| `implemented-host` | Implemented on the desktop host and exposed to the renderer through `window.learnlab`; useful for host integration, but not callable by plugin code. |
+| `experimental-core` | Implemented pure TypeScript types or functions for internal integration tests; fields and semantics can still change. |
+| `not-available` | Planned plugin-host behavior that must not be inferred from current types or preload APIs. |
+
+The current `window.learnlab` API is `implemented-host`. It is documented here
+so host-side features can integrate with the existing bridge, but it must not
+be copied into a future plugin SDK. A plugin host will need a smaller allowlist
+derived from effective permissions and the current package context.
+
 `packages/plugin-sdk` is intentionally only a package placeholder at this
 stage. A plugin must not assume that `window.learnlab` is available inside a
 plugin process or that a plugin can call Electron, Node.js, or arbitrary host
@@ -66,6 +81,12 @@ breaking_change: false
 - `permissions.read`, `permissions.write`, and `permissions.execute` must be
   arrays of non-empty strings when present.
 - `breaking_change` must be a boolean when present.
+
+`breaking_change: true` is currently only an explicit update marker carried by
+the manifest. The current registry and resolver preserve the marker but do not
+compare plugin versions, block upgrades, migrate settings, or decide API
+compatibility from it. Those behaviors remain subject to `PL-08` in
+`UNFREEZE.md` and must not be implemented as a stable policy yet.
 
 The current parser does not require `author`, `signature`, `api_version`,
 `activation`, or `permissions`. Their eventual requiredness and exact
@@ -178,9 +199,31 @@ window.learnlab.dependencies.prerequisites(workspaceDir)
 ```
 
 These APIs are protected by Electron context isolation and main-process
-validation. They should not be copied into a plugin API contract. In
-particular, a future plugin host must expose a smaller allowlist derived from
-the plugin's effective permissions and current context.
+validation. They are currently exposed to the renderer, not to plugin code.
+They should not be copied into a plugin API contract. In particular, a future
+plugin host must expose a smaller allowlist derived from the plugin's effective
+permissions and current context.
+
+### Current host API inventory
+
+The following APIs are the currently implemented host bridge. Their presence
+does not grant filesystem, database, process, network, or plugin permissions
+to any plugin.
+
+| Namespace | Current responsibility |
+| --- | --- |
+| `loadPackage`, `readChapter` | Read a validated package and chapter through the main process. `readChapter` returns `{ content, contentHash }`. |
+| `package` | Search one package or a workspace, and list chapter navigation data. |
+| `workspace` | Resolve the default workspace, initialize it, register/unregister packages, and query registered packages. |
+| `database` | Read/write reading progress and record/query experiment-attempt summaries through the package database service. |
+| `config` | Read/write configuration, export/import JSON, and retrieve manual backup instructions. |
+| `dependencies` | Import a declared bundled dependency and query managed dependencies or external prerequisites. |
+| `plugins` | List installed plugin manifests and resolve the plugin set for one validated package. This does not start plugin code. |
+
+The exact TypeScript signatures are maintained in
+`apps/desktop/src/preload/index.d.ts`. The bridge is an application API, not a
+stable third-party extension point. In particular, `database`, `config`, and
+`dependencies` must not be handed directly to an untrusted plugin.
 
 ## Permissions and scope: current boundary
 

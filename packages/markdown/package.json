@@ -22,7 +22,7 @@
     "yaml": "^2.4.1"
   },
   "devDependencies": {
-    "typescript": "^5.4.0"
+    "typescript": "^6.0.3"
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit"
