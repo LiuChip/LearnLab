@@ -70,7 +70,7 @@ async function readManifest(packageDir: string): Promise<Result<PackageManifest,
 export async function loadPackage(packageDir: string): Promise<Result<LoadedPackage, LoadError>> {
   const normalizedPackageDir = path.resolve(packageDir);
   try {
-    const manifestResult = await readManifest(normalizedPackageDir);
+    const manifestResult = await loadPackageManifest(normalizedPackageDir);
     if (!manifestResult.ok) return manifestResult;
 
     const chaptersDir = path.join(normalizedPackageDir, 'chapters');
@@ -124,6 +124,12 @@ export async function loadPackage(packageDir: string): Promise<Result<LoadedPack
     const cause = error as Error;
     return { ok: false, error: { type: 'read_error', message: cause.message } };
   }
+}
+
+export async function loadPackageManifest(
+  packageDir: string
+): Promise<Result<PackageManifest, LoadError>> {
+  return readManifest(path.resolve(packageDir));
 }
 
 export async function readChapter(

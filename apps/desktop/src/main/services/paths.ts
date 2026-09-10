@@ -9,6 +9,10 @@ export function getDefaultWorkspacesDir(): string {
   return path.join(getLearnLabHome(), 'workspaces');
 }
 
+export function getDefaultWorkspaceDir(): string {
+  return path.join(getDefaultWorkspacesDir(), 'default');
+}
+
 export function getDefaultPluginsDir(): string {
   return path.join(getLearnLabHome(), 'plugins');
 }

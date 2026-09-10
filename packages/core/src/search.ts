@@ -2,7 +2,7 @@ import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import type { PackageManifest, RegisteredPackage } from '@learnlab/core-types';
 import { isValidChapterPath, resolveSafeExistingPath } from './package-paths';
-import { loadPackage } from './package-loader';
+import { loadPackageManifest } from './package-loader';
 
 export interface SearchOptions {
   query: string;
@@ -38,6 +38,9 @@ export interface SearchResult {
   totalMatches: number;
   searchedChapters: number;
   searchedPackages: number;
+  skippedChapters: number;
+  skippedPackages: number;
+  warnings: string[];
   error?: string;
 }
 
@@ -205,6 +208,8 @@ export async function searchPackage(
   const normalizedPackageDir = path.resolve(packageDir);
   const matches: SearchMatch[] = [];
   let searchedChapters = 0;
+  let skippedChapters = 0;
+  const warnings: string[] = [];
 
   const { regex, error: compileError } = compileSearchPattern(options);
   if (compileError || !regex) {
@@ -213,20 +218,31 @@ export async function searchPackage(
       totalMatches: 0,
       searchedChapters: 0,
       searchedPackages: 1,
+      skippedChapters: 0,
+      skippedPackages: 0,
+      warnings: [],
       error: compileError
     };
   }
 
   const chaptersDir = path.join(normalizedPackageDir, 'chapters');
   for (const chapter of manifest.chapters) {
-    if (!isValidChapterPath(normalizedPackageDir, chapter.file)) continue;
+    if (!isValidChapterPath(normalizedPackageDir, chapter.file)) {
+      skippedChapters += 1;
+      warnings.push(`跳过章节「${chapter.title}」：章节路径不安全或无效。`);
+      continue;
+    }
 
     const chapterPath = await resolveSafeExistingPath(
       chaptersDir,
       chapter.file,
       normalizedPackageDir
     );
-    if (!chapterPath) continue;
+    if (!chapterPath) {
+      skippedChapters += 1;
+      warnings.push(`跳过章节「${chapter.title}」：文件不存在或无法安全读取。`);
+      continue;
+    }
 
     try {
       const content = await fs.readFile(chapterPath, 'utf8');
@@ -239,8 +255,11 @@ export async function searchPackage(
         chapterFile: chapter.file
       });
       matches.push(...result.matches);
-    } catch {
-      continue;
+    } catch (cause) {
+      skippedChapters += 1;
+      warnings.push(
+        `跳过章节「${chapter.title}」：${cause instanceof Error ? cause.message : String(cause)}`
+      );
     }
   }
 
@@ -248,7 +267,10 @@ export async function searchPackage(
     matches,
     totalMatches: matches.length,
     searchedChapters,
-    searchedPackages: 1
+    searchedPackages: 1,
+    skippedChapters,
+    skippedPackages: 0,
+    warnings
   };
 }
 
@@ -259,6 +281,9 @@ export async function searchWorkspace(
   const matches: SearchMatch[] = [];
   let searchedChapters = 0;
   let searchedPackages = 0;
+  let skippedChapters = 0;
+  let skippedPackages = 0;
+  const warnings: string[] = [];
 
   const { error: compileError } = compileSearchPattern(options);
   if (compileError) {
@@ -267,6 +292,9 @@ export async function searchWorkspace(
       totalMatches: 0,
       searchedChapters: 0,
       searchedPackages: 0,
+      skippedChapters: 0,
+      skippedPackages: 0,
+      warnings: [],
       error: compileError
     };
   }
@@ -276,14 +304,20 @@ export async function searchWorkspace(
     let manifest: PackageManifest | undefined = 'manifest' in pkg ? pkg.manifest : undefined;
 
     if (!manifest) {
-      const loaded = await loadPackage(pkgDir);
-      if (!loaded.ok) continue;
-      manifest = loaded.value.manifest;
+      const loaded = await loadPackageManifest(pkgDir);
+      if (!loaded.ok) {
+        skippedPackages += 1;
+        warnings.push(`跳过实验包「${pkgDir}」：${loaded.error.message}`);
+        continue;
+      }
+      manifest = loaded.value;
     }
 
     const packageResult = await searchPackage(pkgDir, manifest, options);
     searchedPackages += 1;
     searchedChapters += packageResult.searchedChapters;
+    skippedChapters += packageResult.skippedChapters;
+    warnings.push(...packageResult.warnings);
     matches.push(...packageResult.matches);
   }
 
@@ -291,6 +325,9 @@ export async function searchWorkspace(
     matches,
     totalMatches: matches.length,
     searchedChapters,
-    searchedPackages
+    searchedPackages,
+    skippedChapters,
+    skippedPackages,
+    warnings
   };
 }

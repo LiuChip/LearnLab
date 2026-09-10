@@ -6,6 +6,7 @@ import { registerDependencyIpc } from './ipc/dependency.ipc';
 import { registerDatabaseIpc } from './ipc/database.ipc';
 import { registerConfigIpc } from './ipc/config.ipc';
 import { registerPackageIpc } from './ipc/package.ipc';
+import { registerPluginIpc } from './ipc/plugin.ipc';
 import { DesktopDatabaseService } from './services/database';
 import {
   assertTrustedPackage,
@@ -101,13 +102,14 @@ if (!gotSingleInstanceLock) {
       );
       if (!result.ok) return result;
       const contentHash = calculateContentFingerprint(result.value);
-      return { ok: true, value: result.value, contentHash };
+      return { ok: true, value: { content: result.value, contentHash } };
     });
     registerWorkspaceIpc();
     registerDependencyIpc();
     registerDatabaseIpc();
     registerConfigIpc();
     registerPackageIpc();
+    registerPluginIpc();
 
     ensureMainWindow();
     app.on('activate', () => ensureMainWindow());

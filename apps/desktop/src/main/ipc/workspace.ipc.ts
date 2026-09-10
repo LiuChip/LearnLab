@@ -1,5 +1,6 @@
 import { ipcMain } from 'electron';
 import { WorkspaceManager } from '@learnlab/core';
+import { getDefaultWorkspaceDir } from '../services/paths';
 import {
   assertTrustedRenderer,
   assertTrustedWorkspace,
@@ -10,6 +11,11 @@ import {
 } from './security';
 
 export function registerWorkspaceIpc(): void {
+  ipcMain.handle('workspace:default-dir', async (event) => {
+    assertTrustedRenderer(event);
+    return getDefaultWorkspaceDir();
+  });
+
   ipcMain.handle('workspace:init', async (event, workspaceDir: string) => {
     assertTrustedRenderer(event);
     const normalizedWorkspace = requireNonEmptyString(workspaceDir, 'workspaceDir');

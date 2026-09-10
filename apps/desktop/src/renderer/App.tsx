@@ -11,31 +11,44 @@ import './styles/markdown.css';
 export function App() {
   const store = useReadingStore();
   const [workspacePackages, setWorkspacePackages] = useState<RegisteredPackage[]>([]);
+  const [workspaceDir, setWorkspaceDir] = useState<string | null>(null);
   const [selectedPkgPath, setSelectedPkgPath] = useState<string>('');
 
-  // Initial package source discovery
+  // The default workspace is the user's package registry. The repository's
+  // examples are fixtures and must not become an implicit user package.
   useEffect(() => {
     let cancelled = false;
-    async function initPackageSource() {
+    async function initWorkspace() {
       try {
-        let pkgDir: string | null = null;
-        // Check if there are registered workspace packages
-        // In current MVP without an active chosen workspace folder, fallback to example
-        const exampleDir = await window.learnlab.getExamplePackageDir();
-        pkgDir = exampleDir;
-        setSelectedPkgPath(exampleDir);
-        setWorkspacePackages([
-          { id: 'example', name: 'SQL 基础入门 (示例)', version: '1.0.0', path: exampleDir, isSymlink: false, registeredAt: '' }
-        ]);
+        const defaultDir = await window.learnlab.workspace.getDefaultDir();
+        if (cancelled) return;
+        await window.learnlab.workspace.init(defaultDir);
+        if (cancelled) return;
 
-        if (!cancelled && pkgDir) {
-          await store.loadPackageByPath(pkgDir);
+        const packages = await window.learnlab.workspace.listPackages(defaultDir);
+        if (cancelled) return;
+
+        setWorkspaceDir(defaultDir);
+        setWorkspacePackages(packages);
+        const initialPackage = packages[0];
+        if (!initialPackage) {
+          setSelectedPkgPath('');
+          store.clearView();
+          return;
         }
+
+        setSelectedPkgPath(initialPackage.path);
+        await store.loadPackageByPath(initialPackage.path);
       } catch (err) {
+        if (cancelled) return;
         console.error('Failed to initialize package source:', err);
+        store.clearView({
+          type: 'workspace_error',
+          message: err instanceof Error ? err.message : String(err)
+        });
       }
     }
-    void initPackageSource();
+    void initWorkspace();
     return () => {
       cancelled = true;
     };
@@ -67,7 +80,7 @@ export function App() {
           <strong>{store.packageName}</strong>
           <span>LearnLab 本地交互式实验浏览器</span>
         </div>
-        {workspacePackages.length > 1 && (
+        {workspaceDir && workspacePackages.length > 1 && (
           <select
             value={selectedPkgPath}
             onChange={(e) => {
@@ -150,14 +163,35 @@ export function App() {
           ) : store.searchResults ? (
             <div class="search-results-panel">
               {store.searchResults.error ? (
-                <div class="search-summary" style={{ color: '#dc2626' }}>
-                  {store.searchResults.error}
+                <div class="search-error-content">
+                  <div class="search-summary" style={{ color: '#dc2626' }}>
+                    {store.searchResults.error}
+                  </div>
+                  {store.searchResults.warnings.length > 0 && (
+                    <ul class="search-warning-list" role="list">
+                      {store.searchResults.warnings.map((warning, index) => (
+                        <li key={`${warning}-${index}`}>{warning}</li>
+                      ))}
+                    </ul>
+                  )}
                 </div>
               ) : (
                 <div class="search-success-content">
                   <div class="search-summary">
                     找到 {store.searchResults.totalMatches} 处匹配 (共检索 {store.searchResults.searchedChapters} 节)
                   </div>
+                  {(store.searchResults.skippedChapters > 0 || store.searchResults.skippedPackages > 0) && (
+                    <div class="search-warning-summary">
+                      已跳过 {store.searchResults.skippedChapters} 个章节、{store.searchResults.skippedPackages} 个实验包
+                    </div>
+                  )}
+                  {store.searchResults.warnings.length > 0 && (
+                    <ul class="search-warning-list" role="list">
+                      {store.searchResults.warnings.map((warning, index) => (
+                        <li key={`${warning}-${index}`}>{warning}</li>
+                      ))}
+                    </ul>
+                  )}
                   {store.searchResults.matches.length > 0 && (
                     <ul class="search-match-list" role="list">
                       {store.searchResults.matches.map((m, idx) => (

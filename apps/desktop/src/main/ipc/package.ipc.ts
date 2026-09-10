@@ -2,6 +2,7 @@ import { ipcMain } from 'electron';
 import {
   buildChapterNavigationList,
   loadPackage,
+  loadPackageManifest,
   searchPackage,
   searchWorkspace,
   WorkspaceManager,
@@ -37,17 +38,20 @@ export function registerPackageIpc(): void {
       assertTrustedRenderer(event);
       const trustedDir = assertTrustedPackage(packageDir);
       const options = validateSearchOptions(rawOptions);
-      const loaded = await loadPackage(trustedDir);
+      const loaded = await loadPackageManifest(trustedDir);
       if (!loaded.ok) {
         return {
           matches: [],
           totalMatches: 0,
           searchedChapters: 0,
           searchedPackages: 0,
+          skippedChapters: 0,
+          skippedPackages: 0,
+          warnings: [],
           error: loaded.error.message
         };
       }
-      return searchPackage(trustedDir, loaded.value.manifest, options);
+      return searchPackage(trustedDir, loaded.value, options);
     }
   );
 

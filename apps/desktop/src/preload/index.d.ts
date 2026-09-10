@@ -16,19 +16,24 @@ import type {
   WorkspaceDependencyRecord,
   WorkspacePaths,
   WorkspacePrerequisiteRecord,
-  AppConfig
+  AppConfig,
+  PluginManifest,
+  PluginResolution
 } from '@learnlab/core-types';
+
+type ReadChapterPayload = { content: string; contentHash: string };
 
 export interface LearnLabAPI {
   getExamplePackageDir: () => Promise<string>;
   loadPackage: (packageDir: string) => Promise<Result<LoadedPackage, LoadError>>;
-  readChapter: (packageDir: string, chapterFile: string) => Promise<Result<string, LoadError>>;
+  readChapter: (packageDir: string, chapterFile: string) => Promise<Result<ReadChapterPayload, LoadError>>;
   package: {
     search: (packageDir: string, options: SearchOptions) => Promise<SearchResult>;
     searchWorkspace: (workspaceDir: string, options: SearchOptions) => Promise<SearchResult>;
     listChapters: (packageDir: string) => Promise<ChapterNavigationItem[]>;
   };
   workspace: {
+    getDefaultDir: () => Promise<string>;
     init: (workspaceDir: string) => Promise<WorkspacePaths>;
     registerPackage: (workspaceDir: string, packageDir: string) => Promise<RegisterPackageResult>;
     unregisterPackage: (workspaceDir: string, packageId: string) => Promise<boolean>;
@@ -57,6 +62,10 @@ export interface LearnLabAPI {
     ) => Promise<ImportDependencyResult>;
     list: (workspaceDir: string) => Promise<WorkspaceDependencyRecord[]>;
     prerequisites: (workspaceDir: string) => Promise<WorkspacePrerequisiteRecord[]>;
+  };
+  plugins: {
+    list: () => Promise<PluginManifest[]>;
+    resolveForPackage: (packageDir: string) => Promise<PluginResolution>;
   };
 }
 

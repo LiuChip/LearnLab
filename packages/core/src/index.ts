@@ -1,6 +1,7 @@
 export * from './package-paths';
 export * from './package-loader';
 export * from './plugin-resolver';
+export * from './plugin-manifest';
 export * from './dependency-paths';
 export * from './dependency-fingerprint';
 export * from './dependency-importer';

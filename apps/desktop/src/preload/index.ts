@@ -17,14 +17,18 @@ import type {
   WorkspacePaths,
   WorkspacePrerequisiteRecord,
   AppConfig,
-  Result
+  Result,
+  PluginManifest,
+  PluginResolution
 } from '@learnlab/core-types';
+
+type ReadChapterPayload = { content: string; contentHash: string };
 
 const api = {
   getExamplePackageDir: (): Promise<string> => ipcRenderer.invoke('package:example-dir'),
   loadPackage: (packageDir: string): Promise<Result<LoadedPackage, LoadError>> =>
     ipcRenderer.invoke('package:load', packageDir),
-  readChapter: (packageDir: string, chapterFile: string): Promise<Result<string, LoadError>> =>
+  readChapter: (packageDir: string, chapterFile: string): Promise<Result<ReadChapterPayload, LoadError>> =>
     ipcRenderer.invoke('package:read-chapter', packageDir, chapterFile),
   package: {
     search: (packageDir: string, options: SearchOptions): Promise<SearchResult> =>
@@ -35,6 +39,7 @@ const api = {
       ipcRenderer.invoke('package:list-chapters', packageDir)
   },
   workspace: {
+    getDefaultDir: (): Promise<string> => ipcRenderer.invoke('workspace:default-dir'),
     init: (workspaceDir: string): Promise<WorkspacePaths> =>
       ipcRenderer.invoke('workspace:init', workspaceDir),
     registerPackage: (workspaceDir: string, packageDir: string): Promise<RegisterPackageResult> =>
@@ -76,6 +81,11 @@ const api = {
       ipcRenderer.invoke('dependency:list', workspaceDir),
     prerequisites: (workspaceDir: string): Promise<WorkspacePrerequisiteRecord[]> =>
       ipcRenderer.invoke('dependency:prerequisites', workspaceDir)
+  },
+  plugins: {
+    list: (): Promise<PluginManifest[]> => ipcRenderer.invoke('plugin:list'),
+    resolveForPackage: (packageDir: string): Promise<PluginResolution> =>
+      ipcRenderer.invoke('plugin:resolve-for-package', packageDir)
   }
 };
 

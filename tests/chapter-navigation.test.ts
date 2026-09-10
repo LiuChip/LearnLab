@@ -8,6 +8,7 @@ import {
 } from '../packages/core/src/chapter-navigation';
 import type { PackageManifest } from '@learnlab/core-types';
 import type { ReadingProgressRecord } from '../packages/core/src/database/package-db';
+import { evaluatePluginResolutionStatus } from '../apps/desktop/src/renderer/utils/navigation';
 
 describe('chapter navigation and reading utilities', () => {
   const manifest: PackageManifest = {
@@ -118,5 +119,26 @@ describe('chapter navigation and reading utilities', () => {
     // No required plugins
     const noReq = evaluatePluginReadonlyStatus(undefined, []);
     expect(noReq.isReadOnly).toBe(false);
+  });
+
+  it('maps plugin resolution issues and cycles to a readonly status', () => {
+    const status = evaluatePluginResolutionStatus({
+      loadOrder: [],
+      active: [],
+      issues: [
+        {
+          requirement: { id: 'org.mysql', version: '^1.0.0' },
+          availableVersions: [],
+          reason: 'missing'
+        }
+      ],
+      cycles: [['org.a', 'org.b', 'org.a']],
+      readOnly: true
+    });
+
+    expect(status.isReadOnly).toBe(true);
+    expect(status.missingPlugins).toEqual(['org.mysql (^1.0.0)']);
+    expect(status.reason).toContain('org.mysql (^1.0.0)');
+    expect(status.reason).toContain('org.a -> org.b -> org.a');
   });
 });

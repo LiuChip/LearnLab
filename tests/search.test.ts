@@ -226,6 +226,78 @@ chapters:
     expect(result.matches[1].packageId).toBe('pkg2');
   });
 
+  it('reports chapters that could not be searched', async () => {
+    const pkgDir = await createFixturePackage(
+      `id: "test.pkg"
+version: "1.0.0"
+name: "Test Package"
+author: "Author"
+chapters:
+  - id: "present"
+    title: "Present"
+    file: "present.md"
+  - id: "missing"
+    title: "Missing"
+    file: "missing.md"
+`,
+      { 'present.md': 'visible content' }
+    );
+    const manifest: PackageManifest = {
+      id: 'test.pkg',
+      version: '1.0.0',
+      name: 'Test Package',
+      author: 'Author',
+      chapters: [
+        { id: 'present', title: 'Present', file: 'present.md' },
+        { id: 'missing', title: 'Missing', file: 'missing.md' }
+      ]
+    };
+
+    const result = await searchPackage(pkgDir, manifest, { query: 'visible' });
+
+    expect(result.totalMatches).toBe(1);
+    expect(result.searchedChapters).toBe(1);
+    expect(result.skippedChapters).toBe(1);
+    expect(result.warnings).toHaveLength(1);
+  });
+
+  it('reports packages whose manifests cannot be loaded during workspace search', async () => {
+    const result = await searchWorkspace(
+      [{ dir: path.join(tmpdir(), 'learnlab-search-package-does-not-exist') }],
+      { query: 'anything' }
+    );
+
+    expect(result.searchedPackages).toBe(0);
+    expect(result.skippedPackages).toBe(1);
+    expect(result.warnings).toHaveLength(1);
+  });
+
+  it('continues workspace search when one declared chapter is unavailable', async () => {
+    const pkgDir = await createFixturePackage(
+      `id: "test.workspace-search"
+version: "1.0.0"
+name: "Workspace Search Package"
+author: "Author"
+chapters:
+  - id: "present"
+    title: "Present"
+    file: "present.md"
+  - id: "missing"
+    title: "Missing"
+    file: "missing.md"
+`,
+      { 'present.md': 'searchable workspace content' }
+    );
+
+    const result = await searchWorkspace([{ dir: pkgDir }], { query: 'searchable' });
+
+    expect(result.searchedPackages).toBe(1);
+    expect(result.totalMatches).toBe(1);
+    expect(result.searchedChapters).toBe(1);
+    expect(result.skippedChapters).toBe(1);
+    expect(result.skippedPackages).toBe(0);
+  });
+
   it('replaces text with optional case preservation', () => {
     const text = 'apple Apple APPLE';
     const resNoPreserve = replaceInText(text, {

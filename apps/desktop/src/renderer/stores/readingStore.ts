@@ -2,7 +2,7 @@ import { useState, useCallback, useRef } from 'preact/hooks';
 import { parseMarkdown, type MarkdownResult } from '@learnlab/markdown';
 import {
   calculateScrollProgress,
-  evaluatePluginReadonlyStatus,
+  evaluatePluginResolutionStatus,
   getNextChapter,
   getPreviousChapter,
   type ChapterNavigationItem,
@@ -14,6 +14,11 @@ export interface ReadingError {
   type: string;
   message: string;
 }
+
+const EMPTY_PLUGIN_STATUS: PluginReadonlyStatus = {
+  isReadOnly: false,
+  missingPlugins: []
+};
 
 export function useReadingStore() {
   const [packageDir, setPackageDir] = useState<string | null>(null);
@@ -51,12 +56,14 @@ export function useReadingStore() {
   } | null>(null);
 
   const activePackageDirRef = useRef<string | null>(null);
-  activePackageDirRef.current = packageDir;
-  const activeLoadingChapterIdRef = useRef<string | null>(null);
+  const packageRequestRef = useRef(0);
+  const searchRequestRef = useRef(0);
 
-  const refreshChapters = useCallback(async (pkgDir: string) => {
+  const refreshChapters = useCallback(async (pkgDir: string, requestId?: number) => {
     try {
       const list = await window.learnlab.package.listChapters(pkgDir);
+      if (activePackageDirRef.current !== pkgDir) return;
+      if (requestId !== undefined && packageRequestRef.current !== requestId) return;
       setChapters(list);
     } catch {
       // If listChapters fails, fallback to loaded package manifest
@@ -65,34 +72,55 @@ export function useReadingStore() {
 
   const loadPackageByPath = useCallback(
     async (dir: string, preferredChapterId?: string) => {
+      const requestId = packageRequestRef.current + 1;
+      packageRequestRef.current = requestId;
       activePackageDirRef.current = dir;
       setIsLoading(true);
       setError(null);
       setPackageDir(dir);
+      setPackageName('LearnLab');
+      setChapters([]);
+      setActiveChapterId(null);
+      setMarkdown(null);
+      setContentHash(null);
+      setReadonlyStatus(EMPTY_PLUGIN_STATUS);
+      searchRequestRef.current += 1;
+      setSearchResults(null);
+      setIsSearching(false);
 
       try {
         const loaded = await window.learnlab.loadPackage(dir);
+        if (packageRequestRef.current !== requestId || activePackageDirRef.current !== dir) return;
         if (!loaded.ok) {
           setError({ type: loaded.error.type, message: loaded.error.message });
-          setIsLoading(false);
           return;
         }
 
         const manifest = loaded.value.manifest;
         setPackageName(manifest.name);
 
-        // Evaluate plugin requirements
-        const pluginStatus = evaluatePluginReadonlyStatus(manifest.required_plugins, []);
-        setReadonlyStatus(pluginStatus);
+        // Plugin resolution includes global plugins and the package dependency chain.
+        try {
+          const resolution = await window.learnlab.plugins.resolveForPackage(dir);
+          if (packageRequestRef.current !== requestId || activePackageDirRef.current !== dir) return;
+          setReadonlyStatus(evaluatePluginResolutionStatus(resolution));
+        } catch (cause) {
+          if (packageRequestRef.current !== requestId || activePackageDirRef.current !== dir) return;
+          setReadonlyStatus({
+            isReadOnly: true,
+            missingPlugins: [],
+            reason: `插件解析失败：${cause instanceof Error ? cause.message : String(cause)}。当前处于只读模式，可以正常阅读 Markdown，但实验环境暂不可用。`
+          });
+        }
 
         // Refresh chapter navigation list
         const chapterList = await window.learnlab.package.listChapters(dir);
+        if (packageRequestRef.current !== requestId || activePackageDirRef.current !== dir) return;
         setChapters(chapterList);
 
         if (chapterList.length === 0) {
           setActiveChapterId(null);
           setMarkdown(null);
-          setIsLoading(false);
           return;
         }
 
@@ -102,31 +130,37 @@ export function useReadingStore() {
 
         // Read target chapter
         const readResult = await window.learnlab.readChapter(dir, targetChapter.file);
+        if (packageRequestRef.current !== requestId || activePackageDirRef.current !== dir) return;
         if (!readResult.ok) {
           setError({ type: readResult.error.type, message: readResult.error.message });
-          setIsLoading(false);
           return;
         }
 
-        const hash = (readResult as { contentHash?: string }).contentHash || '';
+        const { content, contentHash: hash } = readResult.value;
         setContentHash(hash);
 
         // Sync with database for fingerprint invalidation
         await window.learnlab.database.saveReadingProgress(dir, targetChapter.id, hash);
+        if (packageRequestRef.current !== requestId || activePackageDirRef.current !== dir) return;
 
-        const parsed = await parseMarkdown(readResult.value);
+        const parsed = await parseMarkdown(content);
+        if (packageRequestRef.current !== requestId || activePackageDirRef.current !== dir) return;
         setMarkdown(parsed);
 
         // Refresh list to reflect any fingerprint reset
         const updatedList = await window.learnlab.package.listChapters(dir);
+        if (packageRequestRef.current !== requestId || activePackageDirRef.current !== dir) return;
         setChapters(updatedList);
       } catch (cause) {
+        if (packageRequestRef.current !== requestId || activePackageDirRef.current !== dir) return;
         setError({
           type: 'read_error',
           message: cause instanceof Error ? cause.message : String(cause)
         });
       } finally {
-        setIsLoading(false);
+        if (packageRequestRef.current === requestId && activePackageDirRef.current === dir) {
+          setIsLoading(false);
+        }
       }
     },
     []
@@ -135,50 +169,70 @@ export function useReadingStore() {
   const selectChapter = useCallback(
     async (chapterId: string) => {
       const currentDir = activePackageDirRef.current;
-      if (!currentDir) return;
+      if (!currentDir || packageDir !== currentDir) return;
 
       const target = chapters.find((c) => c.id === chapterId);
       if (!target) return;
 
-      activeLoadingChapterIdRef.current = chapterId;
+      const requestId = packageRequestRef.current + 1;
+      packageRequestRef.current = requestId;
       setIsLoading(true);
       setError(null);
       setActiveChapterId(chapterId);
+      setMarkdown(null);
+      setContentHash(null);
 
       try {
         const readResult = await window.learnlab.readChapter(currentDir, target.file);
-        if (activeLoadingChapterIdRef.current !== chapterId) return;
+        if (packageRequestRef.current !== requestId || activePackageDirRef.current !== currentDir) return;
         if (!readResult.ok) {
           setError({ type: readResult.error.type, message: readResult.error.message });
-          setIsLoading(false);
           return;
         }
 
-        const hash = (readResult as { contentHash?: string }).contentHash || '';
+        const { content, contentHash: hash } = readResult.value;
         setContentHash(hash);
 
         await window.learnlab.database.saveReadingProgress(currentDir, target.id, hash);
-        if (activeLoadingChapterIdRef.current !== chapterId) return;
+        if (packageRequestRef.current !== requestId || activePackageDirRef.current !== currentDir) return;
 
-        const parsed = await parseMarkdown(readResult.value);
-        if (activeLoadingChapterIdRef.current !== chapterId) return;
+        const parsed = await parseMarkdown(content);
+        if (packageRequestRef.current !== requestId || activePackageDirRef.current !== currentDir) return;
         setMarkdown(parsed);
 
-        await refreshChapters(currentDir);
+        await refreshChapters(currentDir, requestId);
       } catch (cause) {
-        if (activeLoadingChapterIdRef.current !== chapterId) return;
+        if (packageRequestRef.current !== requestId || activePackageDirRef.current !== currentDir) return;
         setError({
           type: 'read_error',
           message: cause instanceof Error ? cause.message : String(cause)
         });
       } finally {
-        if (activeLoadingChapterIdRef.current === chapterId) {
+        if (packageRequestRef.current === requestId && activePackageDirRef.current === currentDir) {
           setIsLoading(false);
         }
       }
     },
-    [chapters, refreshChapters]
+    [chapters, packageDir, refreshChapters]
   );
+
+  const clearView = useCallback((nextError?: ReadingError) => {
+    packageRequestRef.current += 1;
+    searchRequestRef.current += 1;
+    activePackageDirRef.current = null;
+    setPackageDir(null);
+    setPackageName('LearnLab');
+    setChapters([]);
+    setActiveChapterId(null);
+    setMarkdown(null);
+    setContentHash(null);
+    setReadonlyStatus(EMPTY_PLUGIN_STATUS);
+    setSearchQuery('');
+    setSearchResults(null);
+    setIsSearching(false);
+    setError(nextError ?? null);
+    setIsLoading(false);
+  }, []);
 
   const activeChapter = chapters.find((c) => c.id === activeChapterId) ?? null;
   const prevChapter = activeChapterId
@@ -197,6 +251,7 @@ export function useReadingStore() {
   const updateScroll = useCallback(
     async (scrollTop: number, scrollHeight: number, clientHeight: number) => {
       const currentDir = activePackageDirRef.current;
+      const requestId = packageRequestRef.current;
       if (!currentDir || !activeChapterId || !contentHash) return;
 
       const calc = calculateScrollProgress(scrollTop, scrollHeight, clientHeight);
@@ -216,7 +271,8 @@ export function useReadingStore() {
           progressPercent: newPercent,
           completed: isCompleted ? true : undefined
         });
-        await refreshChapters(currentDir);
+        if (packageRequestRef.current !== requestId || activePackageDirRef.current !== currentDir) return;
+        await refreshChapters(currentDir, requestId);
       }
     },
     [activeChapterId, contentHash, activeChapter, refreshChapters]
@@ -225,6 +281,7 @@ export function useReadingStore() {
   const toggleCompleted = useCallback(
     async (completed: boolean) => {
       const currentDir = activePackageDirRef.current;
+      const requestId = packageRequestRef.current;
       if (!currentDir || !activeChapterId || !contentHash) return;
 
       await window.learnlab.database.saveReadingProgress(currentDir, activeChapterId, contentHash, {
@@ -232,7 +289,8 @@ export function useReadingStore() {
         progressPercent: completed ? 100 : 0,
         scrollY: completed ? (activeChapter?.scrollY ?? 0) : 0
       });
-      await refreshChapters(currentDir);
+      if (packageRequestRef.current !== requestId || activePackageDirRef.current !== currentDir) return;
+      await refreshChapters(currentDir, requestId);
     },
     [activeChapterId, contentHash, activeChapter, refreshChapters]
   );
@@ -241,6 +299,9 @@ export function useReadingStore() {
     async (queryText: string, opts?: Partial<SearchOptions>) => {
       const currentDir = activePackageDirRef.current;
       if (!currentDir) return;
+      const packageRequestId = packageRequestRef.current;
+      const searchRequestId = searchRequestRef.current + 1;
+      searchRequestRef.current = searchRequestId;
 
       const mergedOpts: SearchOptions = {
         query: queryText,
@@ -252,17 +313,30 @@ export function useReadingStore() {
       setIsSearching(true);
       try {
         const result = await window.learnlab.package.search(currentDir, mergedOpts);
+        if (
+          packageRequestRef.current !== packageRequestId ||
+          activePackageDirRef.current !== currentDir ||
+          searchRequestRef.current !== searchRequestId
+        ) return;
         setSearchResults(result);
       } catch (err) {
+        if (
+          packageRequestRef.current !== packageRequestId ||
+          activePackageDirRef.current !== currentDir ||
+          searchRequestRef.current !== searchRequestId
+        ) return;
         setSearchResults({
           matches: [],
           totalMatches: 0,
           searchedChapters: 0,
           searchedPackages: 0,
+          skippedChapters: 0,
+          skippedPackages: 0,
+          warnings: [],
           error: err instanceof Error ? err.message : String(err)
         });
       } finally {
-        setIsSearching(false);
+        if (searchRequestRef.current === searchRequestId) setIsSearching(false);
       }
     },
     [searchOptions]
@@ -282,8 +356,10 @@ export function useReadingStore() {
   );
 
   const clearSearch = useCallback(() => {
+    searchRequestRef.current += 1;
     setSearchQuery('');
     setSearchResults(null);
+    setIsSearching(false);
   }, []);
 
   const copyCodeToClipboard = useCallback(async (code: string, codeId: string) => {
@@ -340,6 +416,7 @@ export function useReadingStore() {
     copyStatus,
     loadPackageByPath,
     selectChapter,
+    clearView,
     updateScroll,
     toggleCompleted,
     runSearch,

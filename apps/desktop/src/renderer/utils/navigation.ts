@@ -1,4 +1,4 @@
-import type { ChapterEntry, PluginRequirement } from '@learnlab/core-types';
+import type { ChapterEntry, PluginRequirement, PluginResolution } from '@learnlab/core-types';
 
 export interface ChapterNavigationItem {
   id: string;
@@ -112,5 +112,39 @@ export function evaluatePluginReadonlyStatus(
     isReadOnly: true,
     missingPlugins: missing,
     reason: `缺少所需插件：${missing.join(', ')}。当前处于只读模式，可以正常阅读 Markdown，但实验环境暂不可用。`
+  };
+}
+
+export function evaluatePluginResolutionStatus(
+  resolution: PluginResolution
+): PluginReadonlyStatus {
+  const blockedPlugins = resolution.issues.map(
+    (issue) => `${issue.requirement.id} (${issue.requirement.version})`
+  );
+  const cycleMessages = resolution.cycles.map((cycle) => cycle.join(' -> '));
+  const isReadOnly = resolution.readOnly || blockedPlugins.length > 0 || cycleMessages.length > 0;
+
+  if (!isReadOnly) {
+    return {
+      isReadOnly: false,
+      missingPlugins: []
+    };
+  }
+
+  const reasons: string[] = [];
+  if (blockedPlugins.length > 0) {
+    reasons.push(`插件不可用：${blockedPlugins.join(', ')}`);
+  }
+  if (cycleMessages.length > 0) {
+    reasons.push(`插件依赖存在循环：${cycleMessages.join('; ')}`);
+  }
+  if (reasons.length === 0) {
+    reasons.push('插件解析未完成');
+  }
+
+  return {
+    isReadOnly: true,
+    missingPlugins: blockedPlugins,
+    reason: `${reasons.join('。')}。当前处于只读模式，可以正常阅读 Markdown，但实验环境暂不可用。`
   };
 }
