@@ -19,3 +19,4 @@ export * from './experiment-history';
 export * from './settings-transfer';
 export * from './search';
 export * from './chapter-navigation';
+export * from './permission-resolver';
