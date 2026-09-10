@@ -48,6 +48,16 @@ function validateMigrations(migrations: Migration[]): void {
 export function runMigrations(db: DatabaseConnection, migrations: Migration[]): number[] {
   validateMigrations(migrations);
   initMigrationTable(db);
+  const supportedVersion = migrations.reduce(
+    (highest, migration) => Math.max(highest, migration.version),
+    0
+  );
+  const currentVersion = getCurrentSchemaVersion(db);
+  if (currentVersion > supportedVersion) {
+    throw new Error(
+      `Database uses newer schema version ${currentVersion}; supported version is ${supportedVersion}`
+    );
+  }
   const appliedSet = new Set(getAppliedMigrations(db).map((m) => m.version));
   const newlyApplied: number[] = [];
 

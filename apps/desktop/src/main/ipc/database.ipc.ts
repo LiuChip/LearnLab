@@ -26,25 +26,25 @@ function validateAttempt(value: unknown): ExperimentAttemptDetail {
 export function registerDatabaseIpc(): void {
   ipcMain.handle('database:get-reading-progress', async (event, packageDir: string, chapterId: string) => {
     assertTrustedRenderer(event);
-    const db = DesktopDatabaseService.getPackageDb(assertTrustedPackage(packageDir));
+    const db = DesktopDatabaseService.getPackageDb(assertTrustedPackage(event.sender, packageDir));
     return db.getReadingProgress(requireIdentifier(chapterId, 'chapterId'));
   });
   ipcMain.handle('database:save-reading-progress', async (event, packageDir: string, chapterId: string, contentHash: string, update?: ChapterProgressUpdate) => {
     assertTrustedRenderer(event);
-    const db = DesktopDatabaseService.getPackageDb(assertTrustedPackage(packageDir));
+    const db = DesktopDatabaseService.getPackageDb(assertTrustedPackage(event.sender, packageDir));
     return syncChapterProgress(db, requireIdentifier(chapterId, 'chapterId'), requireNonEmptyString(contentHash, 'contentHash'), validateProgressUpdate(update));
   });
   ipcMain.handle('database:get-all-progress', async (event, packageDir: string) => {
     assertTrustedRenderer(event);
-    return DesktopDatabaseService.getPackageDb(assertTrustedPackage(packageDir)).getAllReadingProgress();
+    return DesktopDatabaseService.getPackageDb(assertTrustedPackage(event.sender, packageDir)).getAllReadingProgress();
   });
   ipcMain.handle('database:record-experiment-attempt', async (event, packageDir: string, attempt: ExperimentAttemptDetail) => {
     assertTrustedRenderer(event);
-    const trustedPackageDir = assertTrustedPackage(packageDir);
+    const trustedPackageDir = assertTrustedPackage(event.sender, packageDir);
     return recordExperimentAttempt({ packageDir: trustedPackageDir, attempt: validateAttempt(attempt), db: DesktopDatabaseService.getPackageDb(trustedPackageDir) });
   });
   ipcMain.handle('database:get-experiment-attempts', async (event, packageDir: string, labId: string) => {
     assertTrustedRenderer(event);
-    return getExperimentAttempts(assertTrustedPackage(packageDir), requireIdentifier(labId, 'labId'));
+    return getExperimentAttempts(assertTrustedPackage(event.sender, packageDir), requireIdentifier(labId, 'labId'));
   });
 }

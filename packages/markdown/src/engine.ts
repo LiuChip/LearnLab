@@ -15,6 +15,8 @@ interface MdastNode {
   data?: Record<string, unknown>;
 }
 
+const SANITIZED_HEADING_PREFIX = 'user-content-';
+
 function walk(node: MdastNode, callback: (node: MdastNode) => void): void {
   callback(node);
   for (const child of node.children ?? []) walk(child, callback);
@@ -47,10 +49,11 @@ function collectHeadings(tree: MdastNode): HeadingEntry[] {
   walk(tree, (node) => {
     if (node.type !== 'heading' || !node.depth) return;
     const text = textFromNode(node).trim();
-    const id = slug(text);
+    const slugId = slug(text);
+    const id = `${SANITIZED_HEADING_PREFIX}${slugId}`;
     node.data ??= {};
     const hProperties = (node.data.hProperties as Record<string, unknown> | undefined) ?? {};
-    node.data.hProperties = { ...hProperties, id };
+    node.data.hProperties = { ...hProperties, id: slugId };
     headings.push({ id, depth: node.depth, text });
   });
   return headings;
@@ -69,9 +72,7 @@ export async function parseMarkdown(source: string): Promise<MarkdownResult> {
   const headings = collectHeadings(tree);
   const htmlProcessor = unified()
     .use(remarkRehype)
-    .use(rehypeSanitize, {
-      clobberPrefix: ''
-    })
+    .use(rehypeSanitize)
     .use(rehypeStringify);
   const transformed = await htmlProcessor.run(tree as never);
   const html = String(htmlProcessor.stringify(transformed));

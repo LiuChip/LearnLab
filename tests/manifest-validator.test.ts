@@ -95,4 +95,41 @@ describe('Manifest Validator', () => {
       expect(result.error).toContainEqual(expect.objectContaining({ path: 'chapters' }));
     }
   });
+
+  it('should reject duplicate chapter, runtime dependency, and prerequisite IDs', () => {
+    const result = validateManifest({
+      id: 'test-pkg',
+      version: '1.0.0',
+      name: 'Test',
+      author: 'Author',
+      chapters: [
+        { id: 'intro', title: 'Intro', file: 'intro.md' },
+        { id: 'intro', title: 'Intro copy', file: 'intro-copy.md' }
+      ],
+      required_plugins: [
+        { id: 'org.example.plugin', version: '1.0.0' },
+        { id: 'org.example.plugin', version: '2.0.0' }
+      ],
+      runtime_dependencies: [
+        { id: 'org.example.runtime', version: '1.0.0', provider: 'test' },
+        { id: 'org.example.runtime', version: '2.0.0', provider: 'test' }
+      ],
+      external_prerequisites: [
+        { id: 'system.tool', version: '>=1.0.0', required: true },
+        { id: 'system.tool', version: '>=2.0.0', required: false }
+      ]
+    });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ path: 'chapters[1].id' }),
+          expect.objectContaining({ path: 'required_plugins[1].id' }),
+          expect.objectContaining({ path: 'runtime_dependencies[1].id' }),
+          expect.objectContaining({ path: 'external_prerequisites[1].id' })
+        ])
+      );
+    }
+  });
 });

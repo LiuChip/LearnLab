@@ -1,0 +1,412 @@
+:root {
+	--ll-workbench-bg: #f4f6f8;
+	--ll-workbench-surface: #ffffff;
+	--ll-workbench-sidebar: #f8fafc;
+	--ll-workbench-border: #d9e0e7;
+	--ll-workbench-muted: #657384;
+	--ll-workbench-text: #17212b;
+	--ll-workbench-accent: #0f766e;
+	--ll-workbench-active: #d8f3ef;
+	--ll-workbench-menubar: #183b3b;
+	--ll-workbench-status: #206b67;
+}
+
+.workbench-shell {
+	display: flex;
+	flex-direction: column;
+	height: 100vh;
+	min-width: 720px;
+	overflow: hidden;
+	color: var(--ll-workbench-text);
+	background: var(--ll-workbench-bg);
+}
+
+.workbench-menubar,
+.workbench-command-center,
+.workbench-status-bar,
+.workbench-body {
+	display: flex;
+	flex-shrink: 0;
+}
+
+.workbench-menubar {
+	height: 34px;
+	align-items: center;
+	gap: 18px;
+	padding: 0 12px;
+	color: #e9ffff;
+	background: var(--ll-workbench-menubar);
+}
+
+.workbench-brand {
+	display: inline-flex;
+	align-items: center;
+	gap: 7px;
+	font-size: 12px;
+	letter-spacing: 0.02em;
+}
+
+.workbench-brand span {
+	display: inline-grid;
+	width: 18px;
+	height: 18px;
+	place-items: center;
+	color: var(--ll-workbench-menubar);
+	background: #8ce2d7;
+	border-radius: 3px;
+}
+
+.workbench-menu-items {
+	display: flex;
+	gap: 2px;
+}
+
+.workbench-menu-items button,
+.workbench-status-bar button,
+.workbench-bottom-tabs button,
+.workbench-editor-tab,
+.workbench-ghost-button,
+.workbench-context-button {
+	border: 0;
+	font: inherit;
+	cursor: pointer;
+}
+
+.workbench-menu-items button {
+	padding: 4px 7px;
+	color: #d7eeee;
+	background: transparent;
+	border-radius: 3px;
+	font-size: 11px;
+}
+
+.workbench-menu-items button:hover,
+.workbench-menu-items button:focus-visible {
+	background: rgba(255, 255, 255, 0.12);
+}
+
+.workbench-window-context {
+	margin-left: auto;
+	overflow: hidden;
+	color: #b7d6d4;
+	font-size: 11px;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.workbench-command-center {
+	min-height: 42px;
+	align-items: center;
+	gap: 12px;
+	padding: 0 12px;
+	background: var(--ll-workbench-surface);
+	border-bottom: 1px solid var(--ll-workbench-border);
+}
+
+.workbench-context-button,
+.workbench-command-placeholder {
+	min-height: 26px;
+	padding: 5px 9px;
+	color: var(--ll-workbench-muted);
+	background: var(--ll-workbench-sidebar);
+	border: 1px solid var(--ll-workbench-border);
+	border-radius: 4px;
+	font-size: 11px;
+}
+
+.workbench-context-button {
+	max-width: 220px;
+	overflow: hidden;
+	color: var(--ll-workbench-text);
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.workbench-command-placeholder {
+	width: min(420px, 45vw);
+}
+
+.workbench-ghost-button {
+	padding: 4px 7px;
+	color: var(--ll-workbench-muted);
+	background: transparent;
+	border-radius: 3px;
+	font-size: 11px;
+}
+
+.workbench-ghost-button:hover,
+.workbench-ghost-button:focus-visible {
+	color: var(--ll-workbench-accent);
+	background: var(--ll-workbench-active);
+}
+
+.workbench-body {
+	flex: 1;
+	min-height: 0;
+	overflow: hidden;
+}
+
+.workbench-activity-bar {
+	display: flex;
+	width: 48px;
+	flex-direction: column;
+	justify-content: space-between;
+	flex-shrink: 0;
+	padding: 6px 0;
+	background: #234b4a;
+}
+
+.workbench-activity-stack {
+	display: flex;
+	flex-direction: column;
+	gap: 3px;
+}
+
+.workbench-activity-button {
+	position: relative;
+	display: grid;
+	width: 48px;
+	height: 38px;
+	place-items: center;
+	color: #b8d4d1;
+	background: transparent;
+	border: 0;
+	font-size: 14px;
+	cursor: pointer;
+}
+
+.workbench-activity-button:hover,
+.workbench-activity-button:focus-visible {
+	color: #ffffff;
+	background: rgba(255, 255, 255, 0.1);
+}
+
+.workbench-activity-button.is-active {
+	color: #ffffff;
+	background: rgba(255, 255, 255, 0.14);
+}
+
+.workbench-activity-button.is-active::before {
+	position: absolute;
+	top: 7px;
+	bottom: 7px;
+	left: 0;
+	width: 3px;
+	content: '';
+	background: #8ce2d7;
+}
+
+.workbench-activity-button.is-muted {
+	color: #89aaa7;
+	cursor: default;
+}
+
+.workbench-primary-sidebar {
+	display: flex;
+	width: 280px;
+	min-width: 220px;
+	max-width: 360px;
+	flex-direction: column;
+	flex-shrink: 0;
+	background: var(--ll-workbench-sidebar);
+	border-right: 1px solid var(--ll-workbench-border);
+}
+
+.workbench-sidebar-header,
+.workbench-bottom-header {
+	display: flex;
+	min-height: 34px;
+	align-items: center;
+	justify-content: space-between;
+	padding: 0 10px;
+	color: var(--ll-workbench-muted);
+	border-bottom: 1px solid var(--ll-workbench-border);
+	font-size: 11px;
+	font-weight: 700;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+}
+
+.workbench-sidebar-content {
+	min-height: 0;
+	overflow-y: auto;
+}
+
+.workbench-legacy-panel {
+	border-bottom-color: var(--ll-workbench-border);
+}
+
+.workbench-package-select {
+	width: calc(100% - 20px);
+	margin: 10px;
+	padding: 5px 7px;
+	color: var(--ll-workbench-text);
+	background: var(--ll-workbench-surface);
+	border: 1px solid var(--ll-workbench-border);
+	border-radius: 4px;
+	font-size: 11px;
+}
+
+.workbench-empty-view {
+	margin: 18px 12px;
+	padding: 14px 12px;
+	color: var(--ll-workbench-muted);
+	background: var(--ll-workbench-surface);
+	border: 1px solid var(--ll-workbench-border);
+	border-radius: 4px;
+	font-size: 12px;
+	line-height: 1.6;
+}
+
+.workbench-center-column {
+	display: flex;
+	min-width: 0;
+	flex: 1;
+	flex-direction: column;
+}
+
+.workbench-editor-group {
+	display: flex;
+	min-height: 0;
+	flex: 1;
+	flex-direction: column;
+	background: var(--ll-workbench-surface);
+}
+
+.workbench-editor-tabs {
+	display: flex;
+	min-height: 35px;
+	align-items: stretch;
+	background: var(--ll-workbench-sidebar);
+	border-bottom: 1px solid var(--ll-workbench-border);
+}
+
+.workbench-editor-tab {
+	display: inline-flex;
+	align-items: center;
+	gap: 7px;
+	padding: 0 14px;
+	color: var(--ll-workbench-muted);
+	background: var(--ll-workbench-sidebar);
+	border-right: 1px solid var(--ll-workbench-border);
+	border-bottom: 2px solid transparent;
+	font-size: 11px;
+}
+
+.workbench-editor-tab.is-active {
+	color: var(--ll-workbench-text);
+	background: var(--ll-workbench-surface);
+	border-bottom-color: var(--ll-workbench-accent);
+}
+
+.workbench-editor-area {
+	min-height: 0;
+	flex: 1;
+}
+
+.workbench-editor-area > .chapter-reader {
+	height: 100%;
+}
+
+.workbench-auxiliary-sidebar {
+	display: flex;
+	width: 220px;
+	min-width: 180px;
+	flex-shrink: 0;
+	flex-direction: column;
+	background: var(--ll-workbench-sidebar);
+	border-left: 1px solid var(--ll-workbench-border);
+	color: var(--ll-workbench-muted);
+	font-size: 11px;
+}
+
+.workbench-auxiliary-sidebar header {
+	min-height: 34px;
+	padding: 10px;
+	color: var(--ll-workbench-text);
+	border-bottom: 1px solid var(--ll-workbench-border);
+	font-weight: 700;
+	text-transform: uppercase;
+}
+
+.workbench-auxiliary-sidebar div {
+	padding: 14px 10px;
+	line-height: 1.6;
+}
+
+.workbench-bottom-panel {
+	min-height: 35px;
+	flex-shrink: 0;
+	background: var(--ll-workbench-surface);
+	border-top: 1px solid var(--ll-workbench-border);
+}
+
+.workbench-bottom-panel.is-open {
+	min-height: 190px;
+}
+
+.workbench-bottom-header {
+	min-height: 34px;
+	padding-right: 6px;
+}
+
+.workbench-bottom-tabs {
+	display: flex;
+	align-self: stretch;
+	gap: 14px;
+}
+
+.workbench-bottom-tabs button {
+	padding: 0;
+	color: var(--ll-workbench-muted);
+	background: transparent;
+	border-bottom: 2px solid transparent;
+	font-size: 10px;
+	font-weight: 700;
+	text-transform: uppercase;
+}
+
+.workbench-bottom-tabs button.is-active {
+	color: var(--ll-workbench-accent);
+	border-bottom-color: var(--ll-workbench-accent);
+}
+
+.workbench-bottom-empty {
+	padding: 18px 12px;
+	color: var(--ll-workbench-muted);
+	font-size: 12px;
+}
+
+.workbench-status-bar {
+	min-height: 24px;
+	align-items: center;
+	justify-content: space-between;
+	padding: 0 10px;
+	color: #eaffff;
+	background: var(--ll-workbench-status);
+	font-size: 10px;
+}
+
+.workbench-status-group {
+	display: flex;
+	align-items: center;
+	gap: 14px;
+}
+
+.workbench-status-bar button {
+	padding: 0;
+	color: inherit;
+	background: transparent;
+	font-size: inherit;
+}
+
+@media (max-width: 1000px) {
+	.workbench-auxiliary-sidebar { display: none; }
+}
+
+@media (max-width: 760px) {
+	.workbench-shell { min-width: 0; }
+	.workbench-primary-sidebar { width: 230px; }
+	.workbench-command-placeholder { width: auto; flex: 1; }
+	.workbench-window-context { display: none; }
+}

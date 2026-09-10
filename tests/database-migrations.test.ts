@@ -37,7 +37,6 @@ describe('database migrations and database abstractions', () => {
           }
         }
       ];
-
       // Run migrations (passed out of order to verify ascending sort)
       const applied = runMigrations(db, migrations);
       expect(applied).toEqual([1, 2]);
@@ -197,6 +196,24 @@ describe('database migrations and database abstractions', () => {
       await rm(root, { recursive: true, force: true });
     }
   });
+});
+
+it('rejects databases created by a newer schema version', () => {
+  const db = createDatabaseConnection(':memory:');
+  try {
+    db.exec(`
+      CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL);
+      INSERT INTO schema_migrations (version, applied_at) VALUES (99, 'future');
+    `);
+
+    expect(() => runMigrations(db, [{
+      version: 1,
+      description: 'Current schema',
+      up: () => undefined
+    }])).toThrow(/newer schema version/i);
+  } finally {
+    db.close();
+  }
 });
 
 it('preserves composite primary keys in the portable database', async () => {

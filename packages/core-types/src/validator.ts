@@ -247,27 +247,50 @@ export function validateManifest(raw: unknown): Result<PackageManifest, Validati
   );
 
   const chapters: ChapterEntry[] = [];
+  const chapterIds = new Set<string>();
   if (!Array.isArray(raw.chapters)) {
     errors.push({ path: 'chapters', message: 'chapters must be an array' });
   } else {
     raw.chapters.forEach((chapter, index) => {
       const parsed = validateChapter(chapter, `chapters[${index}]`, errors);
-      if (parsed) chapters.push(parsed);
+      if (parsed) {
+        if (chapterIds.has(parsed.id)) {
+          errors.push({
+            path: `chapters[${index}].id`,
+            message: `Duplicate chapter ID: ${parsed.id}`
+          });
+        } else {
+          chapterIds.add(parsed.id);
+        }
+        chapters.push(parsed);
+      }
     });
   }
 
   const required_plugins: PluginRequirement[] = [];
+  const requiredPluginIds = new Set<string>();
   if (raw.required_plugins !== undefined) {
     if (!Array.isArray(raw.required_plugins))
       errors.push({ path: 'required_plugins', message: 'required_plugins must be an array' });
     else
       raw.required_plugins.forEach((item, index) => {
         const parsed = validatePluginRequirement(item, `required_plugins[${index}]`, errors);
-        if (parsed) required_plugins.push(parsed);
+        if (parsed) {
+          if (requiredPluginIds.has(parsed.id)) {
+            errors.push({
+              path: `required_plugins[${index}].id`,
+              message: `Duplicate required plugin ID: ${parsed.id}`
+            });
+          } else {
+            requiredPluginIds.add(parsed.id);
+          }
+          required_plugins.push(parsed);
+        }
       });
   }
 
   const runtime_dependencies: RuntimeDependency[] = [];
+  const runtimeDependencyIds = new Set<string>();
   if (raw.runtime_dependencies !== undefined) {
     if (!Array.isArray(raw.runtime_dependencies))
       errors.push({
@@ -277,11 +300,22 @@ export function validateManifest(raw: unknown): Result<PackageManifest, Validati
     else
       raw.runtime_dependencies.forEach((item, index) => {
         const parsed = validateRuntimeDependency(item, `runtime_dependencies[${index}]`, errors);
-        if (parsed) runtime_dependencies.push(parsed);
+        if (parsed) {
+          if (runtimeDependencyIds.has(parsed.id)) {
+            errors.push({
+              path: `runtime_dependencies[${index}].id`,
+              message: `Duplicate runtime dependency ID: ${parsed.id}`
+            });
+          } else {
+            runtimeDependencyIds.add(parsed.id);
+          }
+          runtime_dependencies.push(parsed);
+        }
       });
   }
 
   const external_prerequisites: ExternalPrerequisite[] = [];
+  const prerequisiteIds = new Set<string>();
   if (raw.external_prerequisites !== undefined) {
     if (!Array.isArray(raw.external_prerequisites))
       errors.push({
@@ -295,7 +329,17 @@ export function validateManifest(raw: unknown): Result<PackageManifest, Validati
           `external_prerequisites[${index}]`,
           errors
         );
-        if (parsed) external_prerequisites.push(parsed);
+        if (parsed) {
+          if (prerequisiteIds.has(parsed.id)) {
+            errors.push({
+              path: `external_prerequisites[${index}].id`,
+              message: `Duplicate external prerequisite ID: ${parsed.id}`
+            });
+          } else {
+            prerequisiteIds.add(parsed.id);
+          }
+          external_prerequisites.push(parsed);
+        }
       });
   }
 

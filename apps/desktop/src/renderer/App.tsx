@@ -4,15 +4,21 @@ import { useReadingStore } from './stores/readingStore';
 import { ChapterTree } from './components/navigation/ChapterTree';
 import { ContentsOutline } from './components/navigation/ContentsOutline';
 import { ChapterReader } from './components/content/ChapterReader';
+import { AppShell } from './components/shell/AppShell';
+import type { WorkbenchActivityId } from './utils/workbench';
 import './styles/base.css';
 import './styles/theme.css';
 import './styles/markdown.css';
+import './styles/workbench-layout.css';
 
 export function App() {
   const store = useReadingStore();
   const [workspacePackages, setWorkspacePackages] = useState<RegisteredPackage[]>([]);
   const [workspaceDir, setWorkspaceDir] = useState<string | null>(null);
   const [selectedPkgPath, setSelectedPkgPath] = useState<string>('');
+  const [activeActivity, setActiveActivity] = useState<WorkbenchActivityId>('chapters');
+  const [primaryVisible, setPrimaryVisible] = useState(true);
+  const [bottomPanelVisible, setBottomPanelVisible] = useState(false);
 
   // The default workspace is the user's package registry. The repository's
   // examples are fixtures and must not become an implicit user package.
@@ -73,36 +79,38 @@ export function App() {
   };
 
   return (
-    <main class="app-shell">
-      {/* 顶部标题栏 */}
-      <header class="app-header">
-        <div class="header-title-area">
-          <strong>{store.packageName}</strong>
-          <span>LearnLab 本地交互式实验浏览器</span>
-        </div>
-        {workspaceDir && workspacePackages.length > 1 && (
-          <select
-            value={selectedPkgPath}
-            onChange={(e) => {
-              const path = (e.target as HTMLSelectElement).value;
-              setSelectedPkgPath(path);
-              store.loadPackageByPath(path);
-            }}
-          >
-            {workspacePackages.map((p) => (
-              <option key={p.id} value={p.path}>
-                {p.name}
-              </option>
-            ))}
-          </select>
-        )}
-      </header>
-
-      {/* 主工作区两栏布局 */}
-      <section class="reader-layout">
-        <aside class="sidebar">
+    <AppShell
+      packageName={store.packageName || '未选择实验包'}
+      activeActivity={activeActivity}
+      primaryVisible={primaryVisible}
+      bottomPanelVisible={bottomPanelVisible}
+      progress={Math.round(store.activeChapter?.progressPercent ?? 0)}
+      pluginCount={store.loadedPluginCount}
+      unreadMessages={0}
+      onActivityChange={setActiveActivity}
+      onTogglePrimary={() => setPrimaryVisible((visible) => !visible)}
+      onToggleBottomPanel={() => setBottomPanelVisible((visible) => !visible)}
+      sidebar={
+        <div class="workbench-sidebar-stack">
+          {workspaceDir && workspacePackages.length > 1 && (
+            <select
+              class="workbench-package-select"
+              value={selectedPkgPath}
+              onChange={(e) => {
+                const path = (e.target as HTMLSelectElement).value;
+                setSelectedPkgPath(path);
+                store.loadPackageByPath(path);
+              }}
+            >
+              {workspacePackages.map((p) => (
+                <option key={p.id} value={p.path}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          )}
           {/* 搜索面板 */}
-          <div class="search-box">
+          {activeActivity === 'search' && <div class="search-box workbench-legacy-panel">
             <form onSubmit={handleSearchSubmit} class="search-form">
               <div class="search-input-wrapper">
                 <input
@@ -153,10 +161,10 @@ export function App() {
                 )}
               </div>
             </form>
-          </div>
+          </div>}
 
           {/* 搜索结果展示 */}
-          {store.isSearching ? (
+          {activeActivity === 'search' && (store.isSearching ? (
             <div class="search-results-panel">
               <div class="search-summary">正在检索实验包...</div>
             </div>
@@ -214,23 +222,30 @@ export function App() {
                 </div>
               )}
             </div>
-          ) : null}
+          ) : null)}
 
           {/* 章节目录 */}
-          <ChapterTree
-            chapters={store.chapters}
-            activeChapterId={store.activeChapterId}
-            onSelectChapter={store.selectChapter}
-          />
+          {activeActivity === 'chapters' && (
+            <ChapterTree
+              chapters={store.chapters}
+              activeChapterId={store.activeChapterId}
+              onSelectChapter={store.selectChapter}
+            />
+          )}
 
           {/* 本章大纲 */}
-          <ContentsOutline
-            headings={store.markdown?.headings ?? []}
-            onJumpToHeading={handleJumpToHeading}
-          />
-        </aside>
-
-        {/* 章节阅读主体 */}
+          {activeActivity === 'chapters' && (
+            <ContentsOutline
+              headings={store.markdown?.headings ?? []}
+              onJumpToHeading={handleJumpToHeading}
+            />
+          )}
+          {activeActivity !== 'chapters' && activeActivity !== 'search' && (
+            <div class="workbench-empty-view">{activeActivity} 视图尚未接入。</div>
+          )}
+        </div>
+      }
+      editor={
         <ChapterReader
           markdown={store.markdown}
           activeChapter={store.activeChapter}
@@ -245,7 +260,7 @@ export function App() {
           onCopyCode={store.copyCodeToClipboard}
           onScrollChange={store.updateScroll}
         />
-      </section>
-    </main>
+      }
+    />
   );
 }

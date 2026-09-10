@@ -1,9 +1,22 @@
-import { BrowserWindow, type IpcMainInvokeEvent } from 'electron';
+import { BrowserWindow, type IpcMainInvokeEvent, type WebContents } from 'electron';
 import { pathToFileURL } from 'node:url';
 import * as path from 'node:path';
 
-const trustedWorkspaces = new Set<string>();
-const trustedPackages = new Set<string>();
+interface RendererTrustState {
+  workspaces: Set<string>;
+  packages: Set<string>;
+}
+
+const rendererTrust = new WeakMap<WebContents, RendererTrustState>();
+
+function getTrustState(sender: WebContents): RendererTrustState {
+  let state = rendererTrust.get(sender);
+  if (!state) {
+    state = { workspaces: new Set(), packages: new Set() };
+    rendererTrust.set(sender, state);
+  }
+  return state;
+}
 
 function expectedRendererUrl(): string {
   return pathToFileURL(path.join(__dirname, '../renderer/index.html')).href;
@@ -27,16 +40,24 @@ export function requireNonEmptyString(value: unknown, name: string): string {
   return value;
 }
 
-export function rememberWorkspace(workspaceDir: string): string { const normalized = path.resolve(requireNonEmptyString(workspaceDir, 'workspaceDir')); trustedWorkspaces.add(normalized); return normalized; }
-export function assertTrustedWorkspace(workspaceDir: string): string {
+export function rememberWorkspace(sender: WebContents, workspaceDir: string): string {
   const normalized = path.resolve(requireNonEmptyString(workspaceDir, 'workspaceDir'));
-  if (!trustedWorkspaces.has(normalized)) throw new Error('Workspace has not been initialized by this application window');
+  getTrustState(sender).workspaces.add(normalized);
   return normalized;
 }
-export function rememberPackage(packageDir: string): string { const normalized = path.resolve(requireNonEmptyString(packageDir, 'packageDir')); trustedPackages.add(normalized); return normalized; }
-export function assertTrustedPackage(packageDir: string): string {
+export function assertTrustedWorkspace(sender: WebContents, workspaceDir: string): string {
+  const normalized = path.resolve(requireNonEmptyString(workspaceDir, 'workspaceDir'));
+  if (!getTrustState(sender).workspaces.has(normalized)) throw new Error('Workspace has not been initialized by this application window');
+  return normalized;
+}
+export function rememberPackage(sender: WebContents, packageDir: string): string {
   const normalized = path.resolve(requireNonEmptyString(packageDir, 'packageDir'));
-  if (!trustedPackages.has(normalized)) throw new Error('Package has not been loaded by this application window');
+  getTrustState(sender).packages.add(normalized);
+  return normalized;
+}
+export function assertTrustedPackage(sender: WebContents, packageDir: string): string {
+  const normalized = path.resolve(requireNonEmptyString(packageDir, 'packageDir'));
+  if (!getTrustState(sender).packages.has(normalized)) throw new Error('Package has not been loaded by this application window');
   return normalized;
 }
 export function requireIdentifier(value: unknown, name: string): string {

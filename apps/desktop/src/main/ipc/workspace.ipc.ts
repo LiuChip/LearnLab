@@ -20,7 +20,7 @@ export function registerWorkspaceIpc(): void {
     assertTrustedRenderer(event);
     const normalizedWorkspace = requireNonEmptyString(workspaceDir, 'workspaceDir');
     const paths = await WorkspaceManager.initWorkspace(normalizedWorkspace);
-    rememberWorkspace(paths.workspaceDir);
+    rememberWorkspace(event.sender, paths.workspaceDir);
     return paths;
   });
 
@@ -28,10 +28,10 @@ export function registerWorkspaceIpc(): void {
     'workspace:register-package',
     async (event, workspaceDir: string, packageDir: string) => {
       assertTrustedRenderer(event);
-      const normalizedWorkspace = assertTrustedWorkspace(workspaceDir);
+      const normalizedWorkspace = assertTrustedWorkspace(event.sender, workspaceDir);
       const normalizedPackage = requireNonEmptyString(packageDir, 'packageDir');
       const result = await WorkspaceManager.registerPackage(normalizedWorkspace, normalizedPackage);
-      if (result.ok) rememberPackage(result.value.path);
+      if (result.ok) rememberPackage(event.sender, result.value.path);
       return result;
     }
   );
@@ -41,7 +41,7 @@ export function registerWorkspaceIpc(): void {
     async (event, workspaceDir: string, packageId: string) => {
       assertTrustedRenderer(event);
       return WorkspaceManager.unregisterPackage(
-        assertTrustedWorkspace(workspaceDir),
+        assertTrustedWorkspace(event.sender, workspaceDir),
         requireIdentifier(packageId, 'packageId')
       );
     }
@@ -49,7 +49,7 @@ export function registerWorkspaceIpc(): void {
 
   ipcMain.handle('workspace:list-packages', async (event, workspaceDir: string) => {
     assertTrustedRenderer(event);
-    return WorkspaceManager.listPackages(assertTrustedWorkspace(workspaceDir));
+    return WorkspaceManager.listPackages(assertTrustedWorkspace(event.sender, workspaceDir));
   });
 
   ipcMain.handle(
@@ -57,7 +57,7 @@ export function registerWorkspaceIpc(): void {
     async (event, workspaceDir: string, packageId: string) => {
       assertTrustedRenderer(event);
       return WorkspaceManager.getPackage(
-        assertTrustedWorkspace(workspaceDir),
+        assertTrustedWorkspace(event.sender, workspaceDir),
         requireIdentifier(packageId, 'packageId')
       );
     }

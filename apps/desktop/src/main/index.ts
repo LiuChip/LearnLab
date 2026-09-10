@@ -49,7 +49,9 @@ async function createWindow(): Promise<void> {
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       nodeIntegration: false,
-      contextIsolation: true
+      contextIsolation: true,
+      sandbox: true,
+      webSecurity: true
     }
   });
   mainWindow = window;
@@ -91,13 +93,13 @@ if (!gotSingleInstanceLock) {
     ipcMain.handle('package:load', async (event, packageDir: string) => {
       assertTrustedRenderer(event);
       const result = await loadPackage(requireNonEmptyString(packageDir, 'packageDir'));
-      if (result.ok) rememberPackage(result.value.dir);
+      if (result.ok) rememberPackage(event.sender, result.value.dir);
       return result;
     });
     ipcMain.handle('package:read-chapter', async (event, packageDir: string, chapterFile: string) => {
       assertTrustedRenderer(event);
       const result = await readChapter(
-        assertTrustedPackage(packageDir),
+        assertTrustedPackage(event.sender, packageDir),
         requireNonEmptyString(chapterFile, 'chapterFile')
       );
       if (!result.ok) return result;

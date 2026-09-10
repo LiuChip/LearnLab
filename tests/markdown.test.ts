@@ -54,7 +54,10 @@ it('extracts headings from prose but not fenced code and creates unique unicode 
   const result = await parseMarkdown('# 基础查询\n\n```md\n# not a heading\n```\n\n# 基础查询');
 
   expect(result.headings.map((heading) => heading.text)).toEqual(['基础查询', '基础查询']);
-  expect(result.headings.map((heading) => heading.id)).toEqual(['基础查询', '基础查询-2']);
-  expect(result.html).toContain('id="基础查询"');
-  expect(result.html).toContain('id="基础查询-2"');
+  expect(result.headings.map((heading) => heading.id)).toEqual([
+    'user-content-基础查询',
+    'user-content-基础查询-2'
+  ]);
+  expect(result.html).toContain('id="user-content-基础查询"');
+  expect(result.html).toContain('id="user-content-基础查询-2"');
 });

@@ -8,7 +8,7 @@ export function registerDependencyIpc(): void {
     async (event, workspaceDir: string, packageId: string, dependencyId: string) => {
       assertTrustedRenderer(event);
       return WorkspaceManager.importBundledDependency(
-        assertTrustedWorkspace(workspaceDir),
+        assertTrustedWorkspace(event.sender, workspaceDir),
         requireIdentifier(packageId, 'packageId'),
         requireIdentifier(dependencyId, 'dependencyId')
       );
@@ -17,11 +17,11 @@ export function registerDependencyIpc(): void {
 
   ipcMain.handle('dependency:list', async (event, workspaceDir: string) => {
     assertTrustedRenderer(event);
-    return WorkspaceManager.getWorkspaceDependencies(assertTrustedWorkspace(workspaceDir));
+    return WorkspaceManager.getWorkspaceDependencies(assertTrustedWorkspace(event.sender, workspaceDir));
   });
 
   ipcMain.handle('dependency:prerequisites', async (event, workspaceDir: string) => {
     assertTrustedRenderer(event);
-    return WorkspaceManager.getWorkspacePrerequisites(assertTrustedWorkspace(workspaceDir));
+    return WorkspaceManager.getWorkspacePrerequisites(assertTrustedWorkspace(event.sender, workspaceDir));
   });
 }

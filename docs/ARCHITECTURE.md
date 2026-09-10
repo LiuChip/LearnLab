@@ -69,7 +69,7 @@ apps/desktop/src/renderer/
 └── index.tsx
 ```
 
-第一版先实现静态 Workbench 和 Markdown 阅读视图，再接入持久化、插件 UI 和真实执行面板；正式图标和动效最后处理。
+当前 desktop renderer 已接入最小静态 Workbench 外壳和 Markdown 阅读视图：包含固定 Activity Bar、可隐藏主侧边栏、单一 Editor Group、辅助栏占位、底部面板占位和状态栏。搜索/章节内容沿用现有阅读逻辑；插件 UI 注册、真实通知宿主、标签生命周期、布局持久化、原生菜单命令和真实执行面板仍按未冻结边界后置。正式图标和动效最后处理。
 
 ---
 
@@ -121,6 +121,7 @@ LearnLab 是**实验包播放器**。实验包 = 一个 ZIP 文件（`.labpkg`�
 > 设计决策（2026-08-15）：**LearnLab 像选择"工作区"一样选择"学习区"**——每个学习区是一个可包含多个实验包的目录，用户在不同学习区之间切换，包内进度和笔记按实验包隔离喵~ (´･ω･`)
 
 **类比**：
+
 - VS Code：打开一个文件夹 = 一个工作区（文件夹里可以有多个项目）
 - Minecraft：一个世界 = 一个存档（世界里可以有多个 mod）
 - LearnLab：一个学习区 = 一个学科目录（目录里可以有多个实验包）
@@ -181,14 +182,14 @@ LearnLab 解压 .labpkg → 装入学习区目录
 
 **关键特性**：
 
-| 特性 | 说明 |
-|:---|:---|
-| **解压即用** | 压缩包导入后解压到学习区，之后不再依赖原始包 |
-| **原包可弃** | 导入完成后 .labpkg 可丢弃，学习区已有全部内容 |
-| **学习区隔离** | 每个学习区的进度/笔记/尝试历史互相独立 |
+| 特性           | 说明                                                                       |
+| :------------- | :------------------------------------------------------------------------- |
+| **解压即用**   | 压缩包导入后解压到学习区，之后不再依赖原始包                               |
+| **原包可弃**   | 导入完成后 .labpkg 可丢弃，学习区已有全部内容                              |
+| **学习区隔离** | 每个学习区的进度/笔记/尝试历史互相独立                                     |
 | **位置自定义** | 学习区可放任何位置（默认 `~/.learnlab/workspaces/`，也可以放 U 盘/外接盘） |
-| **离线无忧** | 学习区是纯本地目录，离线可用 |
-| **轻量多开** | 想学新课程 = 新建学习区导入，不互相干扰 |
+| **离线无忧**   | 学习区是纯本地目录，离线可用                                               |
+| **轻量多开**   | 想学新课程 = 新建学习区导入，不互相干扰                                    |
 
 ### 学习进度定义
 
@@ -243,14 +244,15 @@ LearnLab 启动
 
 **与 IDEA 的对照**：
 
-| IntelliJ IDEA | LearnLab |
-|:---|:---|
-| 启动 → 选择项目 | 启动 → 选择学习区 |
+| IntelliJ IDEA       | LearnLab                              |
+| :------------------ | :------------------------------------ |
+| 启动 → 选择项目     | 启动 → 选择学习区                     |
 | 项目 = 一个代码工程 | 学习区 = 一个学科目录（含多个实验包） |
-| 最近项目列表 | 最近学习区列表 |
-| 打开新项目 | 导入新实验包（新建学习区） |
+| 最近项目列表        | 最近学习区列表                        |
+| 打开新项目          | 导入新实验包（新建学习区）            |
 
 **这个设计的价值**：
+
 - **语境清晰**：每次进来先选"学什么"，再开始"怎么学"——对非程序员用户也是一种温和的引导
 - **多线学习不混乱**：同时学 Java 和物理的用户，开屏选一个，进主界面只有那个学习区的内容
 - **保留感**：最近学习区 + 进度百分比，一开屏就有"接着上次学"的暗示喵~
@@ -322,13 +324,13 @@ manifest.yaml 不写 locales 字段（或只有一个语言）→ 单语言包
 
 ```yaml
 lab:
-  id: "ch2-3-1"
-  title: "创建 student 表"
-  type: auto               # auto = 自动判定，manual = 用户自判
+  id: 'ch2-3-1'
+  title: '创建 student 表'
+  type: auto # auto = 自动判定，manual = 用户自判
 
   # 环境配置
   environment:
-    type: mysql            # 环境类型：mysql / python / java / cpp / bash / custom
+    type: mysql # 环境类型：mysql / python / java / cpp / bash / custom
     init: |
       USE studentinfo;     # 初始化脚本（每次 reset 重新执行）
 
@@ -342,29 +344,29 @@ lab:
 
   # 判定规则（type: auto 时生效）
   validation:
-    provider: mysql-schema   # 判定器（插件提供，默认 io-match）
+    provider: mysql-schema # 判定器（插件提供，默认 io-match）
     max_attempts: 5
     check:
       - type: table_exists
         params: { table: student }
       - type: column_exists
         params: { table: student, column: StudentID, type: char(12), nullable: false }
-        message: "StudentID 应为 CHAR(12) 且非空"   # 作者写的说明（可选，不是程序推断）
+        message: 'StudentID 应为 CHAR(12) 且非空' # 作者写的说明（可选，不是程序推断）
       - type: column_exists
         params: { table: student, column: StudentName, type: varchar(10) }
       - type: column_exists
-        params: { table: student, column: Sex, type: char(1), default: "男" }
+        params: { table: student, column: Sex, type: char(1), default: '男' }
       - type: column_exists
         params: { table: student, column: Birthday, type: date }
 
   # 提示与答案（逐步揭示）
   hints:
     - level: 1
-      message: "试试用 CREATE TABLE 语句"
+      message: '试试用 CREATE TABLE 语句'
     - level: 2
-      message: "主键用 PRIMARY KEY，非空用 NOT NULL"
+      message: '主键用 PRIMARY KEY，非空用 NOT NULL'
     - level: 3
-      message: "参考语法：CREATE TABLE 表名 (列名 类型 约束, ...)"
+      message: '参考语法：CREATE TABLE 表名 (列名 类型 约束, ...)'
   solution:
     content: |
       CREATE TABLE student (
@@ -374,18 +376,18 @@ lab:
     # 答案只有用户手动点击才显示（不会自动展开）
 
   # 成功/失败消息（type: manual 时只显示提示，不自动判）
-  on_success: "✅ 实验通过！"
-  on_failure: "❌ 实验失败，再试试吧~"
+  on_success: '✅ 实验通过！'
+  on_failure: '❌ 实验失败，再试试吧~'
 ```
 
 ### 提示与答案的显示策略
 
 > 设计决策（2026-08-15）：**提示自动展开，答案必须手动点**——提示在尝试次数过多时自动出现，答案永远不自动弹出喵~ (｀・ω・´)
 
-| 内容 | 何时显示 | 交互 |
-|:---|:---|:---|
-| **提示（hints）** | 尝试超过一定次数时**自动展开**（默认：失败 ≥ 2 次时逐级显示） | 用户也可手动点「💡 查看提示」 |
-| **答案（solution）** | **永远不自动出现** | 只有用户手动点击「👁️ 查看答案」才显示，且通常需确认"确定要看答案？" |
+| 内容                 | 何时显示                                                      | 交互                                                                |
+| :------------------- | :------------------------------------------------------------ | :------------------------------------------------------------------ |
+| **提示（hints）**    | 尝试超过一定次数时**自动展开**（默认：失败 ≥ 2 次时逐级显示） | 用户也可手动点「💡 查看提示」                                       |
+| **答案（solution）** | **永远不自动出现**                                            | 只有用户手动点击「👁️ 查看答案」才显示，且通常需确认"确定要看答案？" |
 
 > 设计意图：提示是"脚手架"，该给就给；答案是"终点"，要保护学习过程——看一眼答案就失去自己思考的机会了喵~ (´･ω･`)
 
@@ -393,10 +395,10 @@ lab:
 
 ## ⚖️ 判定模式（双判定 + 判定器插件化）
 
-| 模式 | 标签 | 适用场景 | 怎么判 |
-|:---|:---:|:---|:---|
-| **自动判定** | `type: auto` | 由对应专业插件和判定器实现 | 运行领域操作 → 用判定器插件检查 → 输出结构化结果 |
-| **用户自判** | `type: manual` | 数理化/文科/其他 | 执行完实验后，用户自己点 ✅ 或 ❌ |
+| 模式         |      标签      | 适用场景                   | 怎么判                                           |
+| :----------- | :------------: | :------------------------- | :----------------------------------------------- |
+| **自动判定** |  `type: auto`  | 由对应专业插件和判定器实现 | 运行领域操作 → 用判定器插件检查 → 输出结构化结果 |
+| **用户自判** | `type: manual` | 数理化/文科/其他           | 执行完实验后，用户自己点 ✅ 或 ❌                |
 
 **这是一个很务实的设计**——可自动验证的实验交给对应领域判定器插件，数学、物理、医学等不适合自动判定的实验仍可由作者设计为展示结果或用户自判，不强行统一喵~ (´･ω･`)
 
@@ -407,20 +409,20 @@ lab:
 ```yaml
 # manifest.yaml 或 lab 卡片里声明用哪个判定器
 validation:
-  provider: io-match        # 最常用：输出匹配（退出码 + 文本包含预期）
+  provider: io-match # 最常用：输出匹配（退出码 + 文本包含预期）
   rules: { ... }
 ```
 
 可用的判定器（全部通过插件提供）：
 
-| 判定器 | 判什么 | 归属 |
-|:---|:---|:---:|
-| `io-match` | 退出码 + 输出包含预期文本 | 官方示例插件 |
-| `mysql-schema` | 检查表/列/类型/约束是否存在 | mysql 适配器插件 |
-| `pytest-runner` | 跑测试用例 | python 适配器插件 |
-| `choice-check` | 选择题答案比对 | 判定器插件 |
-| `rubric-check` | 按评分项勾选 | 判定器插件 |
-| `custom` | 任意自定义判定 | 第三方插件 |
+| 判定器          | 判什么                      |       归属        |
+| :-------------- | :-------------------------- | :---------------: |
+| `io-match`      | 退出码 + 输出包含预期文本   |   官方示例插件    |
+| `mysql-schema`  | 检查表/列/类型/约束是否存在 | mysql 适配器插件  |
+| `pytest-runner` | 跑测试用例                  | python 适配器插件 |
+| `choice-check`  | 选择题答案比对              |    判定器插件     |
+| `rubric-check`  | 按评分项勾选                |    判定器插件     |
+| `custom`        | 任意自定义判定              |    第三方插件     |
 
 **判定器的结果 = 分项报告（见下）**，不同判定器做的检查不同，但都输出统一格式的分项结果喵~！
 
@@ -499,14 +501,14 @@ LearnLab 采用插件优先架构，但插件不是获得本机完全控制权�
 
 ### 插件类型总览
 
-| 类型 | 提供什么 | 示例 |
-|:---|:---|:---|
-| **面板插件** | 底部/侧边 UI 面板 | terminal、charts |
-| **环境适配器** | 检查环境、生成执行计划、管理会话 | mysql、python、cpp、cad、统计、医学等 |
-| **判定器** | 消费结构化执行结果并输出分项判定 | io-match、mysql-schema、pytest-runner 或专业领域判定器 |
-| **主题/字体插件** | 外观和字体变量 | glass、sepia、中文阅读字体 |
-| **渲染插件** | Markdown 容器或交互式内容 | mermaid、geogebra、echarts 或专业可视化 |
-| **同步/工具插件** | 可选的数据导入导出或 LabKit 能力 | 自定义同步、LabKit 或行业工具 |
+| 类型              | 提供什么                         | 示例                                                   |
+| :---------------- | :------------------------------- | :----------------------------------------------------- |
+| **面板插件**      | 底部/侧边 UI 面板                | terminal、charts                                       |
+| **环境适配器**    | 检查环境、生成执行计划、管理会话 | mysql、python、cpp、cad、统计、医学等                  |
+| **判定器**        | 消费结构化执行结果并输出分项判定 | io-match、mysql-schema、pytest-runner 或专业领域判定器 |
+| **主题/字体插件** | 外观和字体变量                   | glass、sepia、中文阅读字体                             |
+| **渲染插件**      | Markdown 容器或交互式内容        | mermaid、geogebra、echarts 或专业可视化                |
+| **同步/工具插件** | 可选的数据导入导出或 LabKit 能力 | 自定义同步、LabKit 或行业工具                          |
 
 ### 插件宿主、上下文与作用域
 
@@ -524,21 +526,21 @@ LearnLab 主进程
 
 ```typescript
 interface AppContext {
-  readonly learnlabVersion: string
-  readonly apiVersion: number
-  readonly currentPackage?: PackageSummary
-  readonly installedPlugins: ReadonlyArray<PluginSummary>
-  readonly settings: Readonly<ExposedSettings>
-  registerPanel(definition: PanelDefinition): Registration
-  registerCommand(definition: CommandDefinition): Registration
-  registerAction(definition: ActionDefinition): Registration
+  readonly learnlabVersion: string;
+  readonly apiVersion: number;
+  readonly currentPackage?: PackageSummary;
+  readonly installedPlugins: ReadonlyArray<PluginSummary>;
+  readonly settings: Readonly<ExposedSettings>;
+  registerPanel(definition: PanelDefinition): Registration;
+  registerCommand(definition: CommandDefinition): Registration;
+  registerAction(definition: ActionDefinition): Registration;
 }
 
 interface PackageContext {
-  readonly packageId: string
-  readonly packageRoot: string
-  readonly manifest: Readonly<PackageManifest>
-  readonly runtimeDir: string       // <package>/.learnlab/
+  readonly packageId: string;
+  readonly packageRoot: string;
+  readonly manifest: Readonly<PackageManifest>;
+  readonly runtimeDir: string; // <package>/.learnlab/
   // 不直接暴露 workspace.db、其他包路径或任意用户目录
 }
 ```
@@ -562,11 +564,11 @@ interface PackageContext {
 
 第一版权限范围：
 
-| 顶层权限 | 允许的细分能力 |
-|:---|:---|
-| `read` | LearnLab/API 版本、已安装插件摘要、经授权的设置、当前实验包/章节/实验、当前包依赖摘要；学习区包摘要需要额外授权 |
-| `write` | 剪贴板、当前包 `.learnlab/` 文件、插件设置新属性、用户授权的部分设置、当前包环境变量、面板/按钮/右键菜单/命令注册 |
-| `execute` | 网络请求、当前包附带可执行文件和环境、当前包内用户主动运行的代码、外部文件选择请求、核心执行计划 |
+| 顶层权限  | 允许的细分能力                                                                                                    |
+| :-------- | :---------------------------------------------------------------------------------------------------------------- |
+| `read`    | LearnLab/API 版本、已安装插件摘要、经授权的设置、当前实验包/章节/实验、当前包依赖摘要；学习区包摘要需要额外授权   |
+| `write`   | 剪贴板、当前包 `.learnlab/` 文件、插件设置新属性、用户授权的部分设置、当前包环境变量、面板/按钮/右键菜单/命令注册 |
+| `execute` | 网络请求、当前包附带可执行文件和环境、当前包内用户主动运行的代码、外部文件选择请求、核心执行计划                  |
 
 有效权限采用求交，而不是“声明即拥有”：
 
@@ -585,19 +587,19 @@ interface PackageContext {
 插件 manifest 至少包含：
 
 ```yaml
-plugin_id: "org.learnlab.mysql"
-version: "1.2.0"
-author: "LearnLab Contributors"
-signature: "..."       # 作者签名/发布信息；不自动等于安全认证
+plugin_id: 'org.learnlab.mysql'
+version: '1.2.0'
+author: 'LearnLab Contributors'
+signature: '...' # 作者签名/发布信息；不自动等于安全认证
 api_version: 1
 activation:
-  mode: package         # global | package
+  mode: package # global | package
 provides:
   - environment.mysql
   - validator.mysql-schema
 requires_plugins:
-  - id: "org.learnlab.io-match"
-    version: ">=1.0.0 <2.0.0"
+  - id: 'org.learnlab.io-match'
+    version: '>=1.0.0 <2.0.0'
 permissions:
   read:
     - package.manifest
@@ -615,17 +617,17 @@ breaking_change: false
 ```yaml
 experiment_count: 5
 required_plugins:
-  - id: "org.learnlab.mysql"
-    version: ">=1.1.0 <2.0.0"
-    provides: ["environment.mysql", "validator.mysql-schema"]
+  - id: 'org.learnlab.mysql'
+    version: '>=1.1.0 <2.0.0'
+    provides: ['environment.mysql', 'validator.mysql-schema']
 runtime_dependencies:
   - id: org.mysql.runtime
-    version: ">=8.0"
+    version: '>=8.0'
     provider: learnlab.mysql
     source: repository
 external_prerequisites:
   - id: system.docker
-    version: ">=27.0.0"
+    version: '>=27.0.0'
     required: false
 ```
 
@@ -666,13 +668,13 @@ ActivePlugins(package)
 
 官方示例插件用于验证协议，但不等于全部内置在核心：
 
-| 插件 | 类型 | 用途 |
-|:---|:---|:---|
-| `learnlab-plugin-mysql` | 环境适配器 + 判定器 | MySQL 环境和 mysql-schema |
-| `learnlab-plugin-python` | 环境适配器 + 判定器 | Python 环境和 pytest |
-| `learnlab-plugin-cpp` | 环境适配器 + 判定器 | C/C++ 编译运行和 io-match |
-| `learnlab-plugin-terminal` | 面板插件 | xterm.js + node-pty 终端 |
-| `learnlab-plugin-io-match` | 判定器 | 通用输出匹配 |
+| 插件                       | 类型                | 用途                      |
+| :------------------------- | :------------------ | :------------------------ |
+| `learnlab-plugin-mysql`    | 环境适配器 + 判定器 | MySQL 环境和 mysql-schema |
+| `learnlab-plugin-python`   | 环境适配器 + 判定器 | Python 环境和 pytest      |
+| `learnlab-plugin-cpp`      | 环境适配器 + 判定器 | C/C++ 编译运行和 io-match |
+| `learnlab-plugin-terminal` | 面板插件            | xterm.js + node-pty 终端  |
+| `learnlab-plugin-io-match` | 判定器              | 通用输出匹配              |
 
 ---
 
@@ -684,30 +686,30 @@ ActivePlugins(package)
 
 ```typescript
 interface PackageContext {
-  packageId: string
-  packageRoot: string
-  manifest: Readonly<PackageManifest>
+  packageId: string;
+  packageRoot: string;
+  manifest: Readonly<PackageManifest>;
   // 不直接暴露 workspace.db、其他包路径或任意用户目录
 }
 
 interface EnvironmentAdapter {
-  name: string
-  version: string
-  capabilities: string[]
-  checkEnvironment(): Promise<CheckResult>
-  setup(context: PackageContext): Promise<SetupPlan>
-  startSession(): Promise<SessionInfo>
-  createExecution(request: ExecutionRequest): Promise<ExecutionPlan>
-  reset(): Promise<ResetPlan>
-  collectArtifacts(): Promise<Artifact[]>
-  explainFailure(result: RunResult): string
-  cleanup(): Promise<void>
+  name: string;
+  version: string;
+  capabilities: string[];
+  checkEnvironment(): Promise<CheckResult>;
+  setup(context: PackageContext): Promise<SetupPlan>;
+  startSession(): Promise<SessionInfo>;
+  createExecution(request: ExecutionRequest): Promise<ExecutionPlan>;
+  reset(): Promise<ResetPlan>;
+  collectArtifacts(): Promise<Artifact[]>;
+  explainFailure(result: RunResult): string;
+  cleanup(): Promise<void>;
 }
 
 interface ValidatorProvider {
-  id: string
-  version: string
-  validate(result: RunResult, rules: ValidationRule[]): Promise<ValidationResult>
+  id: string;
+  version: string;
+  validate(result: RunResult, rules: ValidationRule[]): Promise<ValidationResult>;
 }
 ```
 
@@ -723,12 +725,12 @@ interface ValidatorProvider {
 
 ### 临时文件规范
 
-| 适配器 | 临时内容 | 清理 |
-|:---|:---|:---|
-| Python | `.learnlab/tmp/.venv`、缓存 | 清空当前包的 `tmp/` |
-| Node.js | `.learnlab/tmp/node_modules` | 清空当前包的 `tmp/` |
-| Java/C++ | 编译产物 | 清空当前包的 `tmp/` |
-| 其他 | 运行脚本和缓存 | 全部放入当前包的 `tmp/` |
+| 适配器   | 临时内容                     | 清理                    |
+| :------- | :--------------------------- | :---------------------- |
+| Python   | `.learnlab/tmp/.venv`、缓存  | 清空当前包的 `tmp/`     |
+| Node.js  | `.learnlab/tmp/node_modules` | 清空当前包的 `tmp/`     |
+| Java/C++ | 编译产物                     | 清空当前包的 `tmp/`     |
+| 其他     | 运行脚本和缓存               | 全部放入当前包的 `tmp/` |
 
 ### 跨平台初始化
 
@@ -736,21 +738,21 @@ interface ValidatorProvider {
 
 ```yaml
 setup:
-  macos: "env/setup.sh"
-  linux: "env/setup.sh"
-  windows: "env/setup.ps1"
+  macos: 'env/setup.sh'
+  linux: 'env/setup.sh'
+  windows: 'env/setup.ps1'
 ```
 
 声明式依赖不是安全绕过方式。安装前仍需用户授权，执行过程仍由内核监督和日志记录。
 
 ### 支持的实验类型（规划）
 
-| 类型 | 标识 | 自动判定 | 提供方 |
-|:---|:---:|:---:|:---|
-| MySQL | `mysql` | ✅ | 官方示例插件（验证插件接口） |
-| Python / Java / C++ 等 | 由插件定义 | 看实现 | 官方或社区插件 |
-| 其他专业环境 | 由插件定义 | 看实现 | 第三方/领域插件 |
-| 自定义 | 由插件定义 | 看实现 | 第三方插件 |
+| 类型                   |    标识    | 自动判定 | 提供方                       |
+| :--------------------- | :--------: | :------: | :--------------------------- |
+| MySQL                  |  `mysql`   |    ✅    | 官方示例插件（验证插件接口） |
+| Python / Java / C++ 等 | 由插件定义 |  看实现  | 官方或社区插件               |
+| 其他专业环境           | 由插件定义 |  看实现  | 第三方/领域插件              |
+| 自定义                 | 由插件定义 |  看实现  | 第三方插件                   |
 
 ## 🛠️ 实验包制作工具（LabKit）
 
@@ -758,10 +760,10 @@ LearnLab 是"播放器"，还需要一个"制作器"——让不会编程的人�
 
 ### 两阶段策略
 
-| 阶段 | 制作方式 | 适用人群 |
-|:---|:---|:---|
-| **Phase 1（初期）** | 手写 YAML + 手动组织 ZIP 压缩包 | 程序员、开源贡献者 |
-| **Phase 2（后期）** | 可视化编辑器（LabKit） | 非计算机专业的教授、教师、内容创作者 |
+| 阶段                | 制作方式                        | 适用人群                             |
+| :------------------ | :------------------------------ | :----------------------------------- |
+| **Phase 1（初期）** | 手写 YAML + 手动组织 ZIP 压缩包 | 程序员、开源贡献者                   |
+| **Phase 2（后期）** | 可视化编辑器（LabKit）          | 非计算机专业的教授、教师、内容创作者 |
 
 ### 手动制作（Phase 1）
 
@@ -818,15 +820,15 @@ LabKit 是一个**图形化的实验包创作工具**，可以独立发布，也
 
 **LabKit 的核心功能：**
 
-| 功能 | 说明 |
-|:---|:---|
-| **章节结构管理器** | 可视化拖拽调整章节目录树，自动生成目录结构 |
-| **Markdown 编辑器** | 所见即所得（WYSIWYG），支持 LaTeX 公式、代码块、图片插入 |
-| **实验卡片编辑器** | 可视化选择实验类型（auto/manual）、环境类型、判定规则模板 |
-| **依赖配置器** | 点选/搜索依赖，自动生成 `dependencies/` 目录 |
-| **一键导出** | 自动打包为 `.labpkg` 文件 |
-| **预览模式** | 在 LearnLab 里直接预览实验包效果（不导出也能测试） |
-| **模板系统** | 提供常见学科模板（MySQL 实验模板、Python 编程模板、数学公式模板） |
+| 功能                | 说明                                                              |
+| :------------------ | :---------------------------------------------------------------- |
+| **章节结构管理器**  | 可视化拖拽调整章节目录树，自动生成目录结构                        |
+| **Markdown 编辑器** | 所见即所得（WYSIWYG），支持 LaTeX 公式、代码块、图片插入          |
+| **实验卡片编辑器**  | 可视化选择实验类型（auto/manual）、环境类型、判定规则模板         |
+| **依赖配置器**      | 点选/搜索依赖，自动生成 `dependencies/` 目录                      |
+| **一键导出**        | 自动打包为 `.labpkg` 文件                                         |
+| **预览模式**        | 在 LearnLab 里直接预览实验包效果（不导出也能测试）                |
+| **模板系统**        | 提供常见学科模板（MySQL 实验模板、Python 编程模板、数学公式模板） |
 
 > **没有 LabKit，LearnLab 只有程序员能制作实验包。有了 LabKit，任何教授都能为自己课程制作实验包——这才是生态真正转起来的关键。**
 
@@ -857,13 +859,13 @@ LearnLab 用 **标准解析器 + 标准扩展 + 自定义渲染层** 的策略�
 
 ### 解析层（标准，不魔改）
 
-| 组件 | 用途 |
-|:---|:---|
-| **markdown-it** | 业界标准 Markdown 解析器（VS Code 同款） |
-| **GFM 扩展** | 表格、任务列表、删除线 |
-| **markdown-it-admonition** | 彩色旁注（NOTE/TIP/IMPORTANT/WARNING/CAUTION） |
-| **markdown-it-texmath** | LaTeX 公式（KaTeX 渲染） |
-| **markdown-it-front-matter** | YAML 元数据解析 |
+| 组件                         | 用途                                           |
+| :--------------------------- | :--------------------------------------------- |
+| **markdown-it**              | 业界标准 Markdown 解析器（VS Code 同款）       |
+| **GFM 扩展**                 | 表格、任务列表、删除线                         |
+| **markdown-it-admonition**   | 彩色旁注（NOTE/TIP/IMPORTANT/WARNING/CAUTION） |
+| **markdown-it-texmath**      | LaTeX 公式（KaTeX 渲染）                       |
+| **markdown-it-front-matter** | YAML 元数据解析                                |
 
 ### 渲染层（LearnLab 的定制空间）
 
@@ -899,16 +901,19 @@ LearnLab 渲染成**漂亮的渐变色卡片**，并支持自定义图标和折�
 ```markdown
 ::: lab-card{id="ch2-3-1"}
 <!-- 渲染成可交互的实验卡片组件 -->
+
 :::
 
 ::: formula
 E = mc²
 <!-- 渲染成 KaTeX 公式块 -->
+
 :::
 
 ::: mermaid
 graph LR; A-->B
 <!-- 渲染成 Mermaid 流程图 -->
+
 :::
 
 ::: code-block{lang="java"}
@@ -918,9 +923,9 @@ graph LR; A-->B
 
 ### 为什么"标准扩展 + 自定义渲染"而不是"魔改"？
 
-| 方案 | 优点 | 缺点 |
-|:---|:---|:---|
-| **魔改解析器** ❌ | 可以发明任意语法 | 与生态脱节；内容换平台就废；维护成本高 |
+| 方案                         | 优点                                                        | 缺点                                   |
+| :--------------------------- | :---------------------------------------------------------- | :------------------------------------- |
+| **魔改解析器** ❌            | 可以发明任意语法                                            | 与生态脱节；内容换平台就废；维护成本高 |
 | **标准扩展 + 自定义渲染** ✅ | 语法通用（Obsidian 也能显示同样的旁注）；渲染惊艳；维护简单 | 语法受限于既有生态（但已很丰富，够用） |
 
 **关键原则**：内容不锁死在 LearnLab——教授写的教材，学员可以拿到任何 Markdown 编辑器里继续阅读，LearnLab 的价值在于**渲染体验**而不是**语法垄断**喵~！
@@ -944,16 +949,16 @@ LearnLab 的视觉风格遵循同样的"极简内核 + 插件扩展"理念——
 ```css
 /* 主题插件的核心：提供一套颜色变量 */
 :root {
-  --color-bg: #ffffff;            /* 背景 */
-  --color-bg-sidebar: #f7f6f3;    /* 侧边栏 */
-  --color-fg: #37352f;            /* 文字 */
-  --color-fg-muted: #787774;      /* 次要文字 */
-  --color-accent: #007acc;        /* 主色 */
-  --color-card: #ffffff;          /* 卡片背景 */
-  --color-border: #ededec;        /* 边框 */
-  --color-code-bg: #f7f6f3;       /* 代码块背景 */
-  --font-body: -apple-system, "PingFang SC", sans-serif;
-  --font-mono: "SF Mono", Menlo, Consolas, monospace;
+  --color-bg: #ffffff; /* 背景 */
+  --color-bg-sidebar: #f7f6f3; /* 侧边栏 */
+  --color-fg: #37352f; /* 文字 */
+  --color-fg-muted: #787774; /* 次要文字 */
+  --color-accent: #007acc; /* 主色 */
+  --color-card: #ffffff; /* 卡片背景 */
+  --color-border: #ededec; /* 边框 */
+  --color-code-bg: #f7f6f3; /* 代码块背景 */
+  --font-body: -apple-system, 'PingFang SC', sans-serif;
+  --font-mono: 'SF Mono', Menlo, Consolas, monospace;
   --radius: 8px;
 }
 ```
@@ -962,14 +967,14 @@ LearnLab 的视觉风格遵循同样的"极简内核 + 插件扩展"理念——
 
 ### 主题插件清单（规划）
 
-| 主题 | 风格 | 状态 |
-|:---|:---|:---:|
-| **learnlab-light**（默认·浅色） | Notion 浅色极简 | ✅ 内置 |
-| **learnlab-dark**（默认·深色） | VS Code 深色工具风 | ✅ 内置（跟随系统） |
-| **learnlab-glass** | 玻璃拟态现代风 | 📦 插件 |
-| **learnlab-sepia** | 护眼纸感（阅读模式） | 📦 插件 |
-| **learnlab-midnight** | 深蓝夜读 | 📦 插件 |
-| **learnlab-contrast** | 高对比主题 | 📦 后续可选插件；不属于 MVP 无障碍承诺 |
+| 主题                            | 风格                 |                  状态                  |
+| :------------------------------ | :------------------- | :------------------------------------: |
+| **learnlab-light**（默认·浅色） | Notion 浅色极简      |                ✅ 内置                 |
+| **learnlab-dark**（默认·深色）  | VS Code 深色工具风   |          ✅ 内置（跟随系统）           |
+| **learnlab-glass**              | 玻璃拟态现代风       |                📦 插件                 |
+| **learnlab-sepia**              | 护眼纸感（阅读模式） |                📦 插件                 |
+| **learnlab-midnight**           | 深蓝夜读             |                📦 插件                 |
+| **learnlab-contrast**           | 高对比主题           | 📦 后续可选插件；不属于 MVP 无障碍承诺 |
 
 > 内置浅色/深色跟随系统自动切换，且支持用户手动覆盖（设置里可固定某一套）喵~
 
@@ -1001,15 +1006,15 @@ LearnLab 采用“学习区数据库 + 实验包数据库”的两层模型。�
 
 ### 数据归属
 
-| 数据 | 所在位置 | 说明 |
-|:---|:---|:---|
-| 学习区内有哪些包 | 学习区 `.learnlab/workspace.db` | 记录包路径、软连接、顺序、展示信息和依赖状态 |
-| 实验包有哪些实验 | 实验包 `.learnlab/package.db` | 使用 manifest 的 `experiment_count`，扫描结果用于校验和定位 |
-| 阅读位置和已读状态 | 实验包 `package.db` | 按章节内容指纹保存 |
-| 每次运行的细节 | `experiment_history/` | 保存代码/命令、输出、报错、判定和产物 |
-| 用户设置和插件设置 | `~/.learnlab/config.json` | 可手动导出/导入 |
-| 用户笔记正文 | `notesDir/*.md` | Markdown 文件，元数据可在 package.db 或重建索引中保存 |
-| 学习区共享依赖 | `<workspace>/dependencies/` | 由 `DependencyManager` 按版本、平台、架构和内容哈希复用的实际独立运行时；仓库依赖和包内置依赖最终都归档于此 |
+| 数据               | 所在位置                        | 说明                                                                                                        |
+| :----------------- | :------------------------------ | :---------------------------------------------------------------------------------------------------------- |
+| 学习区内有哪些包   | 学习区 `.learnlab/workspace.db` | 记录包路径、软连接、顺序、展示信息和依赖状态                                                                |
+| 实验包有哪些实验   | 实验包 `.learnlab/package.db`   | 使用 manifest 的 `experiment_count`，扫描结果用于校验和定位                                                 |
+| 阅读位置和已读状态 | 实验包 `package.db`             | 按章节内容指纹保存                                                                                          |
+| 每次运行的细节     | `experiment_history/`           | 保存代码/命令、输出、报错、判定和产物                                                                       |
+| 用户设置和插件设置 | `~/.learnlab/config.json`       | 可手动导出/导入                                                                                             |
+| 用户笔记正文       | `notesDir/*.md`                 | Markdown 文件，元数据可在 package.db 或重建索引中保存                                                       |
+| 学习区共享依赖     | `<workspace>/dependencies/`     | 由 `DependencyManager` 按版本、平台、架构和内容哈希复用的实际独立运行时；仓库依赖和包内置依赖最终都归档于此 |
 
 ### 进度和移动限制
 
@@ -1069,32 +1074,32 @@ LearnLab 不维护中心化市场，支持两种来源：
 ### 身份和版本
 
 ```yaml
-package_id: "org.learnlab.mysql-intro"
-name: "MySQL 入门教程"
-version: "1.2.0"
-author: "NJUPT 数据库教研组"
-goal: "掌握关系型数据库基础操作"
-prerequisites: ["基础计算机操作"]
-environment: "由 org.learnlab.mysql 插件提供"
-logs: "已知限制和变更记录见仓库日志"
-license: "CC BY-NC-SA 4.0"
-signature: "..."       # 可用于标识作者发布的包；不替代下载完整性校验
+package_id: 'org.learnlab.mysql-intro'
+name: 'MySQL 入门教程'
+version: '1.2.0'
+author: 'NJUPT 数据库教研组'
+goal: '掌握关系型数据库基础操作'
+prerequisites: ['基础计算机操作']
+environment: '由 org.learnlab.mysql 插件提供'
+logs: '已知限制和变更记录见仓库日志'
+license: 'CC BY-NC-SA 4.0'
+signature: '...' # 可用于标识作者发布的包；不替代下载完整性校验
 experiment_count: 5
 required_plugins:
-  - id: "org.learnlab.mysql"
-    version: ">=1.1.0 <2.0.0"
-    provides: ["environment.mysql", "validator.mysql-schema"]
+  - id: 'org.learnlab.mysql'
+    version: '>=1.1.0 <2.0.0'
+    provides: ['environment.mysql', 'validator.mysql-schema']
 runtime_dependencies:
   - id: org.mysql.runtime
-    version: ">=8.0"
+    version: '>=8.0'
     provider: learnlab.mysql
     source: repository
 
 external_prerequisites:
   - id: system.mysql
-    version: ">=8.0"
+    version: '>=8.0'
     required: false
-    reason: "也可以连接用户已有的 MySQL"
+    reason: '也可以连接用户已有的 MySQL'
     detect: plugin
 ```
 
@@ -1102,13 +1107,13 @@ external_prerequisites:
 
 ### 升级规则
 
-| 更新类型 | 默认行为 |
-|:---|:---|
-| 内容未改变、修复打包问题 | 可提示用户更新，保留阅读进度 |
-| 新增章节/实验 | 可选更新；已有未变章节继续保留已读状态 |
-| 修改已有章节内容 | 依据章节内容指纹，将被修改章节重置为 0% |
-| 修改实验判定规则 | 提示用户；旧的 `experiment_history` 永久保留 |
-| 主版本或包身份变化 | 作为新包安装，旧包和旧进度保留 |
+| 更新类型                 | 默认行为                                     |
+| :----------------------- | :------------------------------------------- |
+| 内容未改变、修复打包问题 | 可提示用户更新，保留阅读进度                 |
+| 新增章节/实验            | 可选更新；已有未变章节继续保留已读状态       |
+| 修改已有章节内容         | 依据章节内容指纹，将被修改章节重置为 0%      |
+| 修改实验判定规则         | 提示用户；旧的 `experiment_history` 永久保留 |
+| 主版本或包身份变化       | 作为新包安装，旧包和旧进度保留               |
 
 不提供复杂的自动迁移 DSL。稳定的章节/实验 ID 和内容指纹足以支持当前项目需要；确实无法对应时，显示为历史记录而不是伪造迁移成功。
 
@@ -1153,6 +1158,7 @@ LearnLab 检查 prerequisites
 ```
 
 当用户完成一个实验包后，LearnLab 可以自动推荐：
+
 > "恭喜完成《MySQL 入门教程》！推荐下一步：📚 MySQL 进阶教程、📚 Redis 入门"
 
 ---
@@ -1169,13 +1175,13 @@ LearnLab 检查 prerequisites
 
 LearnLab 在关闭/切换页面时自动记录（本地 SQLite，无需用户手动保存）：
 
-| 记录项 | 示例 | 用途 |
-|:---|:---|:---|
-| **当前位置** | `ch2-3`（第 2 章第 3 节） | 重新打开 → 直接跳到上次位置 |
-| **滚动位置** | `scroll_y: 1450` | 长文档也不用从头读 |
-| **打开的标签页** | `["ch2-3", "lab-2-3-1", "note-1"]` | 恢复多标签工作状态 |
-| **当前实验状态** | 实验 2-3-1 尝试中、步骤进度 | 实验中断续做 |
-| **显示语言** | `zh-CN` | 按用户当时看的语言恢复 |
+| 记录项           | 示例                               | 用途                        |
+| :--------------- | :--------------------------------- | :-------------------------- |
+| **当前位置**     | `ch2-3`（第 2 章第 3 节）          | 重新打开 → 直接跳到上次位置 |
+| **滚动位置**     | `scroll_y: 1450`                   | 长文档也不用从头读          |
+| **打开的标签页** | `["ch2-3", "lab-2-3-1", "note-1"]` | 恢复多标签工作状态          |
+| **当前实验状态** | 实验 2-3-1 尝试中、步骤进度        | 实验中断续做                |
+| **显示语言**     | `zh-CN`                            | 按用户当时看的语言恢复      |
 
 ### 恢复策略
 
@@ -1229,16 +1235,16 @@ LearnLab 核心不提供账号、服务器、云端数据库或“云同步”�
 
 ## 💾 存储策略与目录规范
 
-| 数据 | 格式/位置 | 事实来源 |
-|:---|:---|:---|
-| 全局设置、插件设置 | `~/.learnlab/config.json` | JSON 文件 |
-| 学习区包清单、软连接、顺序 | `<workspace>/.learnlab/workspace.db` | 学习区数据库 |
-| 包内实验索引、阅读进度、实验摘要 | `<package>/.learnlab/package.db` | 实验包数据库 |
-| 实验运行细节、报错、输出、产物 | `<package>/.learnlab/experiment_history/` | 历史文件 |
-| 临时环境和编译缓存 | `<package>/.learnlab/tmp/` | 可清理缓存 |
-| 笔记正文 | `notesDir/` 下 `.md` | Markdown 文件 |
-| 笔记检索索引 | 可从 Markdown 重建 | SQLite 或后续索引实现 |
-| 学习区全文搜索索引 | `<workspace>/.learnlab/tmp/search-index/` | 可删除、可重建的缓存 |
+| 数据                             | 格式/位置                                 | 事实来源              |
+| :------------------------------- | :---------------------------------------- | :-------------------- |
+| 全局设置、插件设置               | `~/.learnlab/config.json`                 | JSON 文件             |
+| 学习区包清单、软连接、顺序       | `<workspace>/.learnlab/workspace.db`      | 学习区数据库          |
+| 包内实验索引、阅读进度、实验摘要 | `<package>/.learnlab/package.db`          | 实验包数据库          |
+| 实验运行细节、报错、输出、产物   | `<package>/.learnlab/experiment_history/` | 历史文件              |
+| 临时环境和编译缓存               | `<package>/.learnlab/tmp/`                | 可清理缓存            |
+| 笔记正文                         | `notesDir/` 下 `.md`                      | Markdown 文件         |
+| 笔记检索索引                     | 可从 Markdown 重建                        | SQLite 或后续索引实现 |
+| 学习区全文搜索索引               | `<workspace>/.learnlab/tmp/search-index/` | 可删除、可重建的缓存  |
 
 ### 默认目录
 
@@ -1299,27 +1305,26 @@ LearnLab 采用 **pnpm workspace + Electron + TypeScript + Preact**。源码仓�
 
 ## 🛠️ 技术栈（本地版）
 
-
 > 2026-09-01 更新：前端框架确认为 Preact，存储策略确认为 JSON（设置）+ SQLite（其余）。
 
-| 层 | 决策状态 | 方案 |
-|:---|:---|:---|
-| **桌面壳** | ✅ 已定 | Electron（跨平台，VS Code 同款） |
-| **主线语言** | ✅ 已定 | TypeScript |
-| **高性能内核** | ✅ 已定 | LearnLab 不内置环境内核；具体环境由插件通过独立 CLI/进程接入，Rust/C++ 只在插件确有需要时使用 |
-| **前端框架** | ✅ 已定 | **Preact + TypeScript**（3KB，API 与 React 一致，electron-vite 原生支持 JSX） |
-| **终端** | ✅ 已定 | xterm.js + node-pty（通过插件提供） |
-| **Markdown 渲染** | ✅ 已定 | markdown-it + admonition |
-| **Markdown 编辑器** | ✅ 已定 | CodeMirror 6（LabKit 用，轻量库） |
-| **构建打包** | ✅ 已定 | electron-vite + electron-builder |
-| **存储** | ✅ 已定 | JSON（设置/配置）+ SQLite（进度/会话/笔记索引，better-sqlite3） |
-| **包格式** | ✅ 已定 | `.labpkg`（ZIP），也支持目录导入 |
-| **仓库结构** | ✅ 已定 | monorepo（内核+插件+LabKit 同仓，pnpm workspace） |
-| **界面 i18n** | ✅ 已定 | MVP 不做，留好 i18n 结构，先中文 |
-| **自动更新** | ✅ 已定 | 不上 |
-| **插件加载机制** | ✅ 方向已定 | 独立插件宿主进程 + 白名单 API；具体消息格式随示例插件收敛 |
-| **插件 API 清单** | ⏳ MVP 后稳定 | 先实现 MySQL/终端两个示例插件，再发布最小 SDK |
-| **数据库 schema** | ⏳ MVP 前冻结 | 学习区 `workspace.db` + 实验包 `package.db`，其他数据库暂不增加 |
+| 层                  | 决策状态      | 方案                                                                                          |
+| :------------------ | :------------ | :-------------------------------------------------------------------------------------------- |
+| **桌面壳**          | ✅ 已定       | Electron（跨平台，VS Code 同款）                                                              |
+| **主线语言**        | ✅ 已定       | TypeScript                                                                                    |
+| **高性能内核**      | ✅ 已定       | LearnLab 不内置环境内核；具体环境由插件通过独立 CLI/进程接入，Rust/C++ 只在插件确有需要时使用 |
+| **前端框架**        | ✅ 已定       | **Preact + TypeScript**（3KB，API 与 React 一致，electron-vite 原生支持 JSX）                 |
+| **终端**            | ✅ 已定       | xterm.js + node-pty（通过插件提供）                                                           |
+| **Markdown 渲染**   | ✅ 已定       | markdown-it + admonition                                                                      |
+| **Markdown 编辑器** | ✅ 已定       | CodeMirror 6（LabKit 用，轻量库）                                                             |
+| **构建打包**        | ✅ 已定       | electron-vite + electron-builder                                                              |
+| **存储**            | ✅ 已定       | JSON（设置/配置）+ SQLite（进度/会话/笔记索引，better-sqlite3）                               |
+| **包格式**          | ✅ 已定       | `.labpkg`（ZIP），也支持目录导入                                                              |
+| **仓库结构**        | ✅ 已定       | monorepo（内核+插件+LabKit 同仓，pnpm workspace）                                             |
+| **界面 i18n**       | ✅ 已定       | MVP 不做，留好 i18n 结构，先中文                                                              |
+| **自动更新**        | ✅ 已定       | 不上                                                                                          |
+| **插件加载机制**    | ✅ 方向已定   | 独立插件宿主进程 + 白名单 API；具体消息格式随示例插件收敛                                     |
+| **插件 API 清单**   | ⏳ MVP 后稳定 | 先实现 MySQL/终端两个示例插件，再发布最小 SDK                                                 |
+| **数据库 schema**   | ⏳ MVP 前冻结 | 学习区 `workspace.db` + 实验包 `package.db`，其他数据库暂不增加                               |
 
 ---
 

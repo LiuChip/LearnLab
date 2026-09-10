@@ -36,7 +36,7 @@ export function registerPackageIpc(): void {
     'package:search',
     async (event, packageDir: string, rawOptions: unknown) => {
       assertTrustedRenderer(event);
-      const trustedDir = assertTrustedPackage(packageDir);
+      const trustedDir = assertTrustedPackage(event.sender, packageDir);
       const options = validateSearchOptions(rawOptions);
       const loaded = await loadPackageManifest(trustedDir);
       if (!loaded.ok) {
@@ -59,7 +59,7 @@ export function registerPackageIpc(): void {
     'package:search-workspace',
     async (event, workspaceDir: string, rawOptions: unknown) => {
       assertTrustedRenderer(event);
-      const trustedWorkspace = assertTrustedWorkspace(workspaceDir);
+      const trustedWorkspace = assertTrustedWorkspace(event.sender, workspaceDir);
       const options = validateSearchOptions(rawOptions);
       const packages = await WorkspaceManager.listPackages(trustedWorkspace);
       return searchWorkspace(packages, options);
@@ -70,7 +70,7 @@ export function registerPackageIpc(): void {
     'package:list-chapters',
     async (event, packageDir: string) => {
       assertTrustedRenderer(event);
-      const trustedDir = assertTrustedPackage(packageDir);
+      const trustedDir = assertTrustedPackage(event.sender, packageDir);
       const loaded = await loadPackage(trustedDir);
       if (!loaded.ok) {
         throw new Error(loaded.error.message);

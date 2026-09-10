@@ -33,6 +33,7 @@ export function useReadingStore() {
     isReadOnly: false,
     missingPlugins: []
   });
+  const [loadedPluginCount, setLoadedPluginCount] = useState(0);
 
   // Search state
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -84,6 +85,7 @@ export function useReadingStore() {
       setMarkdown(null);
       setContentHash(null);
       setReadonlyStatus(EMPTY_PLUGIN_STATUS);
+      setLoadedPluginCount(0);
       searchRequestRef.current += 1;
       setSearchResults(null);
       setIsSearching(false);
@@ -103,6 +105,7 @@ export function useReadingStore() {
         try {
           const resolution = await window.learnlab.plugins.resolveForPackage(dir);
           if (packageRequestRef.current !== requestId || activePackageDirRef.current !== dir) return;
+          setLoadedPluginCount(resolution.active.length);
           setReadonlyStatus(evaluatePluginResolutionStatus(resolution));
         } catch (cause) {
           if (packageRequestRef.current !== requestId || activePackageDirRef.current !== dir) return;
@@ -111,6 +114,7 @@ export function useReadingStore() {
             missingPlugins: [],
             reason: `插件解析失败：${cause instanceof Error ? cause.message : String(cause)}。当前处于只读模式，可以正常阅读 Markdown，但实验环境暂不可用。`
           });
+          setLoadedPluginCount(0);
         }
 
         // Refresh chapter navigation list
@@ -407,6 +411,7 @@ export function useReadingStore() {
     isLoading,
     error,
     readonlyStatus,
+    loadedPluginCount,
     searchQuery,
     setSearchQuery,
     searchOptions,
