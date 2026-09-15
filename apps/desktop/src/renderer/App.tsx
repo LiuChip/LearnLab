@@ -1,40 +1,85 @@
-import { useEffect, useState, useCallback } from 'preact/hooks';
-import type { RegisteredPackage } from '@learnlab/core-types';
-import { useReadingStore } from './stores/readingStore';
-import { ChapterTree } from './components/navigation/ChapterTree';
-import { ContentsOutline } from './components/navigation/ContentsOutline';
+import { useCallback, useEffect, useRef, useState } from 'preact/hooks';
+import type { SearchMatch } from '@learnlab/core';
+import type {
+  RegisteredPackage
+} from '@learnlab/core-types';
 import { ChapterReader } from './components/content/ChapterReader';
+import { ChapterTree } from './components/navigation/ChapterTree';
+import { DependencyList } from './components/navigation/DependencyList';
+import { ExperimentList } from './components/navigation/ExperimentList';
+import { FileExplorer } from './components/navigation/FileExplorer';
+import { PluginList } from './components/navigation/PluginList';
+import { SearchReplaceView } from './components/navigation/SearchReplaceView';
+import { WorkspacePackageList } from './components/navigation/WorkspacePackageList';
 import { AppShell } from './components/shell/AppShell';
-import type { WorkbenchActivityId } from './utils/workbench';
+import { AuxiliarySidebar } from './components/shell/AuxiliarySidebar';
+import { useReadingStore } from './stores/readingStore';
+import { loadWorkbenchCatalog, type WorkbenchCatalog } from './stores/catalogStore';
 import {
   activateEditorTab,
   closeEditorTab,
   createChapterTabId,
   createEditorTabsState,
   openEditorTab,
+  type EditorTab,
   type EditorTabsState
 } from './stores/tabStore';
+import {
+  addNotification,
+  clearNotifications,
+  createWorkbenchState,
+  dismissNotification,
+  expireNotification,
+  getUnreadNotificationCount,
+  selectActivity,
+  setBottomPanel,
+  toggleNotificationCenter,
+  type NotificationInput,
+  type WorkbenchState
+} from './stores/workbenchStore';
+import type { WorkbenchActivityId } from './utils/workbench';
 import './styles/base.css';
 import './styles/theme.css';
 import './styles/markdown.css';
 import './styles/workbench-layout.css';
 
+const EMPTY_CATALOG: WorkbenchCatalog = {
+  plugins: [],
+  dependencies: [],
+  prerequisites: [],
+  loading: true,
+  errors: {}
+};
+
 export function App() {
   const store = useReadingStore();
   const [workspacePackages, setWorkspacePackages] = useState<RegisteredPackage[]>([]);
   const [workspaceDir, setWorkspaceDir] = useState<string | null>(null);
-  const [selectedPkgPath, setSelectedPkgPath] = useState<string>('');
-  const [selectedPkgId, setSelectedPkgId] = useState<string>('');
-  const [activeActivity, setActiveActivity] = useState<WorkbenchActivityId>('chapters');
-  const [primaryVisible, setPrimaryVisible] = useState(true);
-  const [bottomPanelVisible, setBottomPanelVisible] = useState(false);
+  const [selectedPackageId, setSelectedPackageId] = useState('');
+  const [catalog, setCatalog] = useState<WorkbenchCatalog>(EMPTY_CATALOG);
   const [editorTabs, setEditorTabs] = useState<EditorTabsState>(createEditorTabsState);
+  const [workbench, setWorkbench] = useState<WorkbenchState>(() => ({
+    ...createWorkbenchState(),
+    primaryVisible: window.innerWidth >= 600,
+    auxiliaryVisible: window.innerWidth >= 1050
+  }));
+  const [primaryWidth, setPrimaryWidth] = useState(270);
+  const [auxiliaryWidth, setAuxiliaryWidth] = useState(280);
+  const [bottomPanelHeight, setBottomPanelHeight] = useState(210);
+  const [quickOpenVisible, setQuickOpenVisible] = useState(false);
+  const [quickQuery, setQuickQuery] = useState('');
+  const quickInputRef = useRef<HTMLInputElement>(null);
+  const lastErrorRef = useRef('');
+  const lastSearchResultRef = useRef<object | null>(null);
 
-  // The default workspace is the user's package registry. The repository's
-  // examples are fixtures and must not become an implicit user package.
+  const notify = useCallback((input: NotificationInput) => {
+    setWorkbench((state) => addNotification(state, input));
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
-    async function initWorkspace() {
+
+    async function initializeWorkspace() {
       try {
         const defaultDir = await window.learnlab.workspace.getDefaultDir();
         if (cancelled) return;
@@ -46,268 +91,306 @@ export function App() {
 
         setWorkspaceDir(defaultDir);
         setWorkspacePackages(packages);
+
         const initialPackage = packages[0];
         if (!initialPackage) {
-          setSelectedPkgPath('');
-            setSelectedPkgId('');
-            setEditorTabs(createEditorTabsState());
+          setSelectedPackageId('');
+          setEditorTabs(createEditorTabsState());
           store.clearView();
+          notify({
+            level: 'info',
+            title: '学习区已打开',
+            message: '当前学习区还没有已注册的实验包。'
+          });
           return;
         }
 
-        setSelectedPkgPath(initialPackage.path);
-        setSelectedPkgId(initialPackage.id);
+        setSelectedPackageId(initialPackage.id);
         await store.loadPackageByPath(initialPackage.path);
-      } catch (err) {
+      } catch (cause) {
         if (cancelled) return;
-        console.error('Failed to initialize package source:', err);
-        store.clearView({
-          type: 'workspace_error',
-          message: err instanceof Error ? err.message : String(err)
+        const message = cause instanceof Error ? cause.message : String(cause);
+        setCatalog({
+          ...EMPTY_CATALOG,
+          loading: false,
+          errors: { dependencies: message, prerequisites: message }
         });
+        store.clearView({ type: 'workspace_error', message });
       }
     }
-    void initWorkspace();
-    return () => {
-      cancelled = true;
-    };
+
+    void initializeWorkspace();
+    return () => { cancelled = true; };
   }, []);
 
-  const handleJumpToHeading = useCallback((headingId: string) => {
-    const el = document.getElementById(headingId);
-    if (el) {
-      el.scrollIntoView({ behavior: 'smooth' });
-    }
-  }, []);
+  useEffect(() => {
+    if (!workspaceDir) return;
+    let cancelled = false;
+    setCatalog(EMPTY_CATALOG);
+    void loadWorkbenchCatalog({
+      listPlugins: () => window.learnlab.plugins.list(),
+      listDependencies: () => window.learnlab.dependencies.list(workspaceDir),
+      listPrerequisites: () => window.learnlab.dependencies.prerequisites(workspaceDir)
+    }).then((nextCatalog) => {
+      if (!cancelled) setCatalog(nextCatalog);
+    });
+    return () => { cancelled = true; };
+  }, [workspaceDir]);
 
-  const handleSearchSubmit = (e: Event) => {
-    e.preventDefault();
-    if (store.searchQuery.trim()) {
-      store.runSearch(store.searchQuery);
+  useEffect(() => {
+    if (!store.error) {
+      lastErrorRef.current = '';
+      return;
     }
-  };
+    const key = `${store.error.type}:${store.error.message}`;
+    if (lastErrorRef.current === key) return;
+    lastErrorRef.current = key;
+    notify({
+      level: 'error',
+      title: store.error.type === 'workspace_error' ? '学习区加载失败' : '内容加载失败',
+      message: store.error.message
+    });
+  }, [store.error?.type, store.error?.message, notify]);
 
-  const handleSelectSearchMatch = (chapterId: string) => {
-    store.selectChapter(chapterId);
-  };
+  useEffect(() => {
+    if (!store.searchResults || lastSearchResultRef.current === store.searchResults) return;
+    lastSearchResultRef.current = store.searchResults;
+    notify({
+      level: store.searchResults.error ? 'warning' : 'info',
+      title: store.searchResults.error ? '搜索未完成' : '搜索完成',
+      message: store.searchResults.error ?? `找到 ${store.searchResults.totalMatches} 处匹配。`
+    });
+  }, [store.searchResults, notify]);
 
-  const handleCloseTab = (tabId: string) => {
-    const nextState = closeEditorTab(editorTabs, tabId);
-    setEditorTabs(nextState);
-    const nextTab = nextState.tabs.find((tab) => tab.id === nextState.activeTabId);
-    if (nextTab?.packageId === selectedPkgId) {
-			store.selectChapter(nextTab.chapterId);
-    }
-  };
+  useEffect(() => {
+    if (quickOpenVisible) quickInputRef.current?.focus();
+  }, [quickOpenVisible]);
 
   useEffect(() => {
     const activeChapter = store.activeChapter;
-    if (!activeChapter || !selectedPkgId) return;
+    if (!activeChapter || !selectedPackageId) return;
     setEditorTabs((state) => openEditorTab(state, {
-      id: createChapterTabId(selectedPkgId, activeChapter.id),
+      id: createChapterTabId(selectedPackageId, activeChapter.id),
       title: activeChapter.title,
       kind: 'chapter',
-      packageId: selectedPkgId,
+      packageId: selectedPackageId,
       chapterId: activeChapter.id
     }));
-  }, [store.activeChapter?.id, selectedPkgId]);
+  }, [store.activeChapter?.id, selectedPackageId]);
+
+  const selectedPackage = workspacePackages.find((item) => item.id === selectedPackageId);
+  const quickResults = store.chapters.filter((chapter) =>
+    chapter.title.toLocaleLowerCase().includes(quickQuery.trim().toLocaleLowerCase())
+  );
+
+  const openChapterTab = useCallback((chapterId: string) => {
+    const chapter = store.chapters.find((item) => item.id === chapterId);
+    if (!chapter || !selectedPackageId) return;
+    const tab: EditorTab = {
+      id: createChapterTabId(selectedPackageId, chapter.id),
+      title: chapter.title,
+      kind: 'chapter',
+      packageId: selectedPackageId,
+      chapterId: chapter.id
+    };
+    setEditorTabs((state) => openEditorTab(state, tab));
+    void store.selectChapter(chapter.id);
+  }, [store.chapters, store.selectChapter, selectedPackageId]);
+
+  const switchPackage = useCallback(async (item: RegisteredPackage, preferredChapterId?: string) => {
+    if (item.id === selectedPackageId && !preferredChapterId) return;
+    setSelectedPackageId(item.id);
+    setEditorTabs(createEditorTabsState());
+    await store.loadPackageByPath(item.path, preferredChapterId);
+  }, [selectedPackageId, store.loadPackageByPath]);
+
+  const selectSearchMatch = useCallback(async (match: SearchMatch) => {
+    const item = workspacePackages.find((candidate) => candidate.id === match.packageId);
+    if (!item) {
+      notify({ level: 'warning', title: '无法打开搜索结果', message: '该实验包已不在当前学习区。' });
+      return;
+    }
+    if (item.id !== selectedPackageId) {
+      await switchPackage(item, match.chapterId);
+    } else {
+      openChapterTab(match.chapterId);
+    }
+  }, [workspacePackages, selectedPackageId, switchPackage, openChapterTab, notify]);
+
+  const activateTab = useCallback((tabId: string) => {
+    const tab = editorTabs.tabs.find((item) => item.id === tabId);
+    if (!tab) return;
+    setEditorTabs((state) => activateEditorTab(state, tabId));
+    if (tab.packageId === selectedPackageId) void store.selectChapter(tab.chapterId);
+  }, [editorTabs.tabs, selectedPackageId, store.selectChapter]);
+
+  const closeTab = useCallback((tabId: string) => {
+    const closingActiveTab = editorTabs.activeTabId === tabId;
+    const nextState = closeEditorTab(editorTabs, tabId);
+    setEditorTabs(nextState);
+    if (!closingActiveTab) return;
+    const nextTab = nextState.tabs.find((item) => item.id === nextState.activeTabId);
+    if (nextTab?.packageId === selectedPackageId) void store.selectChapter(nextTab.chapterId);
+  }, [editorTabs, selectedPackageId, store.selectChapter]);
+
+  const jumpToHeading = useCallback((headingId: string) => {
+    document.getElementById(headingId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, []);
+
+  let sidebar;
+  switch (workbench.activeActivity) {
+    case 'chapters':
+      sidebar = <ChapterTree chapters={store.chapters} activeChapterId={store.activeChapterId} onSelectChapter={openChapterTab} />;
+      break;
+    case 'search':
+      sidebar = (
+        <SearchReplaceView
+          query={store.searchQuery}
+          options={store.searchOptions}
+          results={store.searchResults}
+          searching={store.isSearching}
+          onQueryChange={store.setSearchQuery}
+          onToggleOption={store.toggleSearchOption}
+          onSearch={() => { if (store.searchQuery.trim()) void store.runSearch(store.searchQuery, undefined, workspaceDir); }}
+          onClear={store.clearSearch}
+          onSelectMatch={(match) => { void selectSearchMatch(match); }}
+        />
+      );
+      break;
+    case 'experiments':
+      sidebar = <ExperimentList chapter={store.activeChapter} readonlyStatus={store.readonlyStatus} />;
+      break;
+    case 'plugins':
+      sidebar = <PluginList plugins={catalog.plugins} loadedCount={store.loadedPluginCount} loading={catalog.loading} error={catalog.errors.plugins} />;
+      break;
+    case 'dependencies':
+      sidebar = <DependencyList dependencies={catalog.dependencies} prerequisites={catalog.prerequisites} loading={catalog.loading} dependencyError={catalog.errors.dependencies} prerequisiteError={catalog.errors.prerequisites} />;
+      break;
+    case 'workspace':
+      sidebar = <WorkspacePackageList packages={workspacePackages} selectedPackageId={selectedPackageId} onSelectPackage={(item) => { void switchPackage(item); }} />;
+      break;
+    case 'explorer':
+      sidebar = <FileExplorer packageName={store.packageName} chapters={store.chapters} activeChapterId={store.activeChapterId} onSelectChapter={openChapterTab} />;
+      break;
+  }
+
+  const editor = editorTabs.activeTabId ? (
+    <ChapterReader
+      documentKey={editorTabs.activeTabId}
+      markdown={store.markdown}
+      activeChapter={store.activeChapter}
+      prevChapter={store.prevChapter}
+      nextChapter={store.nextChapter}
+      readonlyStatus={store.readonlyStatus}
+      isLoading={store.isLoading}
+      error={store.error}
+      copyStatus={store.copyStatus}
+      onNavigateChapter={openChapterTab}
+      onToggleCompleted={store.toggleCompleted}
+      onCopyCode={store.copyCodeToClipboard}
+      onScrollChange={store.updateScroll}
+    />
+  ) : (
+    <div class="workbench-editor-empty">
+      <strong>LearnLab</strong>
+      <span>{store.chapters.length ? '从左侧打开一个章节' : '当前没有可打开的章节'}</span>
+    </div>
+  );
+
+  const expire = useCallback((id: string) => setWorkbench((state) => expireNotification(state, id)), []);
+  const dismiss = useCallback((id: string) => setWorkbench((state) => dismissNotification(state, id)), []);
+  const toggleCenter = useCallback(() => setWorkbench((state) => toggleNotificationCenter(state)), []);
 
   return (
-    <AppShell
-      packageName={store.packageName || '未选择实验包'}
-      activeActivity={activeActivity}
-      primaryVisible={primaryVisible}
-      bottomPanelVisible={bottomPanelVisible}
-    tabs={editorTabs.tabs}
-    activeTabId={editorTabs.activeTabId}
-      progress={Math.round(store.activeChapter?.progressPercent ?? 0)}
-      pluginCount={store.loadedPluginCount}
-      unreadMessages={0}
-      onActivityChange={setActiveActivity}
-      onTogglePrimary={() => setPrimaryVisible((visible) => !visible)}
-      onToggleBottomPanel={() => setBottomPanelVisible((visible) => !visible)}
-    onActivateTab={(tabId) => {
-      setEditorTabs((state) => activateEditorTab(state, tabId));
-      const tab = editorTabs.tabs.find((candidate) => candidate.id === tabId);
-      if (tab?.packageId === selectedPkgId) store.selectChapter(tab.chapterId);
-    }}
-    onCloseTab={handleCloseTab}
-      sidebar={
-        <div class="workbench-sidebar-stack">
-          {workspaceDir && workspacePackages.length > 1 && (
-            <select
-              class="workbench-package-select"
-              value={selectedPkgPath}
-              onChange={(e) => {
-                const path = (e.target as HTMLSelectElement).value;
-                const selectedPackage = workspacePackages.find((p) => p.path === path);
-                setSelectedPkgPath(path);
-                setSelectedPkgId(selectedPackage?.id ?? '');
-                setEditorTabs(createEditorTabsState());
-                store.loadPackageByPath(path);
-              }}
-            >
-              {workspacePackages.map((p) => (
-                <option key={p.id} value={p.path}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
-          )}
-          {/* 搜索面板 */}
-          {activeActivity === 'search' && <div class="search-box workbench-legacy-panel">
-            <form onSubmit={handleSearchSubmit} class="search-form">
-              <div class="search-input-wrapper">
-                <input
-                  type="text"
-                  class="search-input"
-                  placeholder="搜索当前实验包..."
-                  value={store.searchQuery}
-                  onInput={(e) => store.setSearchQuery((e.target as HTMLInputElement).value)}
-                />
-                <button type="submit" class="option-btn" title="执行搜索">
-                  🔍
-                </button>
-              </div>
-              <div class="search-options">
-                <button
-                  type="button"
-                  class={`option-btn ${store.searchOptions.caseSensitive ? 'is-active' : ''}`}
-                  onClick={() => store.toggleSearchOption('caseSensitive')}
-                  title="区分大小写 (Aa)"
-                >
-                  Aa
-                </button>
-                <button
-                  type="button"
-                  class={`option-btn ${store.searchOptions.wholeWord ? 'is-active' : ''}`}
-                  onClick={() => store.toggleSearchOption('wholeWord')}
-                  title="全字匹配 (\b)"
-                >
-                  \b
-                </button>
-                <button
-                  type="button"
-                  class={`option-btn ${store.searchOptions.isRegex ? 'is-active' : ''}`}
-                  onClick={() => store.toggleSearchOption('isRegex')}
-                  title="正则表达式 (.*)"
-                >
-                  .*
-                </button>
-                {store.searchResults && (
-                  <button
-                    type="button"
-                    class="clear-search-btn"
-                    onClick={store.clearSearch}
-                    title="清空搜索结果"
-                  >
-                    清空
-                  </button>
-                )}
-              </div>
-            </form>
-          </div>}
-
-          {/* 搜索结果展示 */}
-          {activeActivity === 'search' && (store.isSearching ? (
-            <div class="search-results-panel">
-              <div class="search-summary">正在检索实验包...</div>
-            </div>
-          ) : store.searchResults ? (
-            <div class="search-results-panel">
-              {store.searchResults.error ? (
-                <div class="search-error-content">
-                  <div class="search-summary" style={{ color: '#dc2626' }}>
-                    {store.searchResults.error}
-                  </div>
-                  {store.searchResults.warnings.length > 0 && (
-                    <ul class="search-warning-list" role="list">
-                      {store.searchResults.warnings.map((warning, index) => (
-                        <li key={`${warning}-${index}`}>{warning}</li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              ) : (
-                <div class="search-success-content">
-                  <div class="search-summary">
-                    找到 {store.searchResults.totalMatches} 处匹配 (共检索 {store.searchResults.searchedChapters} 节)
-                  </div>
-                  {(store.searchResults.skippedChapters > 0 || store.searchResults.skippedPackages > 0) && (
-                    <div class="search-warning-summary">
-                      已跳过 {store.searchResults.skippedChapters} 个章节、{store.searchResults.skippedPackages} 个实验包
-                    </div>
-                  )}
-                  {store.searchResults.warnings.length > 0 && (
-                    <ul class="search-warning-list" role="list">
-                      {store.searchResults.warnings.map((warning, index) => (
-                        <li key={`${warning}-${index}`}>{warning}</li>
-                      ))}
-                    </ul>
-                  )}
-                  {store.searchResults.matches.length > 0 && (
-                    <ul class="search-match-list" role="list">
-                      {store.searchResults.matches.map((m, idx) => (
-                        <li key={idx} class="search-match-item">
-                          <button
-                            type="button"
-                            class="search-match-btn"
-                            onClick={() => handleSelectSearchMatch(m.chapterId)}
-                          >
-                            <div class="match-meta">
-                              <span>{m.chapterTitle}</span>
-                              <span>第 {m.line} 行</span>
-                            </div>
-                            <div class="match-snippet">{m.preview}</div>
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              )}
-            </div>
-          ) : null)}
-
-          {/* 章节目录 */}
-          {activeActivity === 'chapters' && (
-            <ChapterTree
-              chapters={store.chapters}
-              activeChapterId={store.activeChapterId}
-              onSelectChapter={store.selectChapter}
-            />
-          )}
-
-          {/* 本章大纲 */}
-          {activeActivity === 'chapters' && (
-            <ContentsOutline
-              headings={store.markdown?.headings ?? []}
-              onJumpToHeading={handleJumpToHeading}
-            />
-          )}
-          {activeActivity !== 'chapters' && activeActivity !== 'search' && (
-            <div class="workbench-empty-view">{activeActivity} 视图尚未接入。</div>
-          )}
-        </div>
-      }
-      editor={editorTabs.activeTabId ? (
-          <ChapterReader
-            markdown={store.markdown}
-            activeChapter={store.activeChapter}
-            prevChapter={store.prevChapter}
-            nextChapter={store.nextChapter}
-            readonlyStatus={store.readonlyStatus}
-            isLoading={store.isLoading}
-            error={store.error}
-            copyStatus={store.copyStatus}
-            onNavigateChapter={store.selectChapter}
-            onToggleCompleted={store.toggleCompleted}
-            onCopyCode={store.copyCodeToClipboard}
-            onScrollChange={store.updateScroll}
+    <div class="workbench-app-root">
+      <AppShell
+        packageName={store.packageName || '未选择实验包'}
+        packageVersion={selectedPackage?.version}
+        activeActivity={workbench.activeActivity}
+        primaryVisible={workbench.primaryVisible}
+        auxiliaryVisible={workbench.auxiliaryVisible}
+        bottomPanelVisible={workbench.bottomPanelVisible}
+        bottomPanel={workbench.bottomPanel}
+        theme={workbench.theme}
+        primaryWidth={primaryWidth}
+        auxiliaryWidth={auxiliaryWidth}
+        bottomPanelHeight={bottomPanelHeight}
+        progress={Math.round(store.activeChapter?.progressPercent ?? 0)}
+        pluginCount={store.loadedPluginCount}
+        unreadMessages={getUnreadNotificationCount(workbench)}
+        notificationCenterVisible={workbench.notificationCenterVisible}
+        notifications={workbench.notifications}
+        onActivityChange={(activity: WorkbenchActivityId) => setWorkbench((state) => selectActivity(state, activity))}
+        onTogglePrimary={() => setWorkbench((state) => ({ ...state, primaryVisible: !state.primaryVisible }))}
+        onToggleBottomPanel={() => setWorkbench((state) => ({ ...state, bottomPanelVisible: !state.bottomPanelVisible }))}
+        onSelectBottomPanel={(panel) => setWorkbench((state) => setBottomPanel(state, panel))}
+        onShowPlugins={() => setWorkbench((state) => ({ ...state, activeActivity: 'plugins', primaryVisible: true }))}
+        onToggleNotifications={toggleCenter}
+        onExpireNotification={expire}
+        onDismissNotification={dismiss}
+        onClearNotifications={() => setWorkbench(clearNotifications)}
+        onQuickOpen={() => setQuickOpenVisible(true)}
+        onResizePrimary={setPrimaryWidth}
+        onResizeAuxiliary={setAuxiliaryWidth}
+        onResizeBottomPanel={setBottomPanelHeight}
+        tabs={editorTabs.tabs}
+        activeTabId={editorTabs.activeTabId}
+        onActivateTab={activateTab}
+        onCloseTab={closeTab}
+        sidebar={sidebar}
+        editor={editor}
+        auxiliary={(
+          <AuxiliarySidebar
+            packageName={store.packageName}
+            packageVersion={selectedPackage?.version}
+            chapterTitle={store.activeChapter?.title}
+            progress={Math.round(store.activeChapter?.progressPercent ?? 0)}
+            pluginCount={store.loadedPluginCount}
+            headings={store.markdown?.headings ?? []}
+            onJumpToHeading={jumpToHeading}
           />
-        ) : (
-          <div class="workbench-editor-empty">选择一个章节以开始阅读。</div>
         )}
-    />
+      />
+      {quickOpenVisible && (
+        <div
+          class="workbench-quick-overlay"
+          onClick={(event) => { if (event.target === event.currentTarget) setQuickOpenVisible(false); }}
+          onKeyDown={(event) => { if (event.key === 'Escape') setQuickOpenVisible(false); }}
+        >
+          <section class="workbench-quick-open" role="dialog" aria-label="快速打开章节">
+            <input
+              ref={quickInputRef}
+              value={quickQuery}
+              placeholder="搜索章节"
+              aria-label="章节名称"
+              onInput={(event) => setQuickQuery(event.currentTarget.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' && quickResults[0]) {
+                  openChapterTab(quickResults[0].id);
+                  setQuickOpenVisible(false);
+                  setQuickQuery('');
+                }
+              }}
+            />
+            <div class="workbench-quick-results">
+              {quickResults.map((chapter) => (
+                <button
+                  type="button"
+                  key={chapter.id}
+                  onClick={() => {
+                    openChapterTab(chapter.id);
+                    setQuickOpenVisible(false);
+                    setQuickQuery('');
+                  }}
+                >
+                  <span>{chapter.title}</span><small>{store.packageName}</small>
+                </button>
+              ))}
+              {!quickResults.length && <p>没有匹配的章节</p>}
+            </div>
+          </section>
+        </div>
+      )}
+    </div>
   );
 }

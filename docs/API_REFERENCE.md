@@ -63,6 +63,55 @@ closeEditorTab(state: EditorTabsState, tabId: string): EditorTabsState
 
 稳定性标签为 `internal`：当前仅支持章节标签，不是插件注册接口，也不支持预览/固定/脏状态、多编辑组或会话持久化。章节标签 ID 由包 ID 和章节 ID编码生成，避免不同实验包的同名章节碰撞。重复打开已有 ID 只改变活动标签；未知 ID 操作返回原状态；关闭活动标签优先激活右侧相邻标签，其次激活左侧标签，关闭最后一个标签返回空状态。该状态不持有文件路径、Node/Electron 对象、IPC 句柄或权限信息。
 
+### Renderer 内部 Workbench 状态
+
+以下接口均为 `internal`，只服务正式 renderer，不是插件 UI 注册协议：
+
+```ts
+// stores/workbenchStore.ts
+createWorkbenchState(): WorkbenchState
+selectActivity(state, activity): WorkbenchState
+setBottomPanel(state, panel): WorkbenchState
+addNotification(state, input): WorkbenchState
+expireNotification(state, notificationId): WorkbenchState
+dismissNotification(state, notificationId): WorkbenchState
+clearNotifications(state): WorkbenchState
+toggleNotificationCenter(state): WorkbenchState
+getUnreadNotificationCount(state): number
+
+// stores/notificationTimer.ts
+INFO_NOTIFICATION_DURATION_MS // 8000
+INFO_NOTIFICATION_PROGRESS_MS // 7000
+scheduleNotificationExpiry(notification, onExpire): () => void
+
+// stores/catalogStore.ts
+loadWorkbenchCatalog(loaders): Promise<WorkbenchCatalog>
+```
+
+`WorkbenchState` 当前包含 Activity Bar、主/辅助侧栏、底部面板、主题和会话通知
+状态。每条 `info` 通知从自身 `createdAt` 起独立计时，7 秒进度条结束后保留约
+1 秒再隐藏气泡；`warning`/`error` 不由该计时器自动隐藏。通知隐藏不等于从会话
+历史删除，打开通知中心也不会切换底部面板。
+
+`loadWorkbenchCatalog` 并行读取插件、学习区依赖和外部前置软件，使用独立失败
+边界保留已成功的数据，并在 `WorkbenchCatalog.errors` 中按来源返回错误。目录
+读取失败不得阻止学习区或章节正文加载。
+
+`stores/readingStore.ts` 还导出内部判断函数
+`shouldPreserveWorkspaceSearch(workspaceDir: string | null): boolean`。其 hook 返回的
+搜索入口为：
+
+```ts
+runSearch(
+  query: string,
+  options?: Partial<SearchOptions>,
+  workspaceDir?: string | null
+): Promise<void>
+```
+
+传入 `workspaceDir` 时调用学习区搜索，切换实验包后保留已有结果；不传时调用当前
+实验包搜索，加载其他包会清除结果。这是当前 renderer 行为，不是公共搜索 SDK。
+
 ## 1. Desktop renderer bridge
 
 实现和声明分别位于 `apps/desktop/src/preload/index.ts` 与
@@ -251,6 +300,14 @@ context 只有只读的版本、workspace ID、名称和 package ID 类型，不
 
 这些是宿主的高权限 Node/database 组件，不能作为插件 allowlist。
 
+`createDatabaseConnection(dbPath, { forcePortable? })` 的当前选择规则属于
+`experimental-core`：新建的持久数据库默认写入 LearnLab 便携 JSON 格式；已有
+空文件占位也按新便携数据库初始化；已有便携数据库继续使用便携 driver；内存数据库在可用时使用 `node:sqlite`；已有
+SQLite 文件只在运行时支持 `node:sqlite` 时打开，否则抛出
+`SQLite database requires a runtime with node:sqlite support`。该错误不会再把 SQLite
+文件误报为损坏的便携 JSON。便携 driver 只实现核心当前使用的 SQL 子集，不应被
+当作通用 SQLite 兼容层。
+
 ### 内容、阅读、实验历史、搜索、导航和权限
 
 - 内容：`calculateContentFingerprint`、`calculateChapterFileFingerprint`。
@@ -321,4 +378,5 @@ capability ID、授权弹窗/撤销/持久化、运行时 context 注入、`regi
 
 | 日期       | 变更                                                                                                                                         |
 | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2026-09-15 | 登记正式 renderer 的 Workbench、通知计时、目录聚合和学习区搜索内部接口；记录新持久数据库默认便携格式及已有 SQLite 的兼容行为。               |
 | 2026-09-15 | 首次全仓扫描；登记 renderer bridge、内部 IPC、workspace 包导出、manifest/存储格式和未开放能力；修正 preload 配置 API 的 `unknown` 类型漂移。 |

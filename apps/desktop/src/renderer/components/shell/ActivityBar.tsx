@@ -41,9 +41,6 @@ export function ActivityBar({ activeActivity, primaryVisible, onSelect }: Activi
 					);
 				})}
 			</div>
-			<button type="button" class="workbench-activity-button is-muted" disabled aria-label="设置">
-				<span aria-hidden="true">设</span>
-			</button>
 		</nav>
 	);
 }

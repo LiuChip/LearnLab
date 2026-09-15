@@ -20,6 +20,10 @@ const EMPTY_PLUGIN_STATUS: PluginReadonlyStatus = {
   missingPlugins: []
 };
 
+export function shouldPreserveWorkspaceSearch(workspaceDir: string | null): boolean {
+  return workspaceDir !== null;
+}
+
 export function useReadingStore() {
   const [packageDir, setPackageDir] = useState<string | null>(null);
   const [packageName, setPackageName] = useState<string>('LearnLab');
@@ -59,6 +63,7 @@ export function useReadingStore() {
   const activePackageDirRef = useRef<string | null>(null);
   const packageRequestRef = useRef(0);
   const searchRequestRef = useRef(0);
+  const searchWorkspaceRef = useRef<string | null>(null);
 
   const refreshChapters = useCallback(async (pkgDir: string, requestId?: number) => {
     try {
@@ -86,9 +91,13 @@ export function useReadingStore() {
       setContentHash(null);
       setReadonlyStatus(EMPTY_PLUGIN_STATUS);
       setLoadedPluginCount(0);
-      searchRequestRef.current += 1;
-      setSearchResults(null);
-      setIsSearching(false);
+      setCopyStatus(null);
+      if (!shouldPreserveWorkspaceSearch(searchWorkspaceRef.current)) {
+        searchRequestRef.current += 1;
+        searchWorkspaceRef.current = null;
+        setSearchResults(null);
+        setIsSearching(false);
+      }
 
       try {
         const loaded = await window.learnlab.loadPackage(dir);
@@ -223,6 +232,7 @@ export function useReadingStore() {
   const clearView = useCallback((nextError?: ReadingError) => {
     packageRequestRef.current += 1;
     searchRequestRef.current += 1;
+    searchWorkspaceRef.current = null;
     activePackageDirRef.current = null;
     setPackageDir(null);
     setPackageName('LearnLab');
@@ -231,9 +241,11 @@ export function useReadingStore() {
     setMarkdown(null);
     setContentHash(null);
     setReadonlyStatus(EMPTY_PLUGIN_STATUS);
+    setLoadedPluginCount(0);
     setSearchQuery('');
     setSearchResults(null);
     setIsSearching(false);
+    setCopyStatus(null);
     setError(nextError ?? null);
     setIsLoading(false);
   }, []);
@@ -300,9 +312,10 @@ export function useReadingStore() {
   );
 
   const runSearch = useCallback(
-    async (queryText: string, opts?: Partial<SearchOptions>) => {
+    async (queryText: string, opts?: Partial<SearchOptions>, workspaceDir?: string | null) => {
       const currentDir = activePackageDirRef.current;
       if (!currentDir) return;
+      searchWorkspaceRef.current = workspaceDir ?? null;
       const packageRequestId = packageRequestRef.current;
       const searchRequestId = searchRequestRef.current + 1;
       searchRequestRef.current = searchRequestId;
@@ -316,7 +329,9 @@ export function useReadingStore() {
 
       setIsSearching(true);
       try {
-        const result = await window.learnlab.package.search(currentDir, mergedOpts);
+        const result = workspaceDir
+          ? await window.learnlab.package.searchWorkspace(workspaceDir, mergedOpts)
+          : await window.learnlab.package.search(currentDir, mergedOpts);
         if (
           packageRequestRef.current !== packageRequestId ||
           activePackageDirRef.current !== currentDir ||
@@ -351,7 +366,7 @@ export function useReadingStore() {
       setSearchOptions((prev) => {
         const next = { ...prev, [key]: !prev[key] };
         if (searchQuery.trim() && searchResults) {
-          void runSearch(searchQuery, next);
+          void runSearch(searchQuery, next, searchWorkspaceRef.current);
         }
         return next;
       });
@@ -361,6 +376,7 @@ export function useReadingStore() {
 
   const clearSearch = useCallback(() => {
     searchRequestRef.current += 1;
+    searchWorkspaceRef.current = null;
     setSearchQuery('');
     setSearchResults(null);
     setIsSearching(false);

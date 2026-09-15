@@ -5,6 +5,7 @@ import type { ChapterNavigationItem, PluginReadonlyStatus } from '../../utils/na
 import type { ReadingError } from '../../stores/readingStore';
 
 interface ChapterReaderProps {
+  documentKey: string;
   markdown: MarkdownResult | null;
   activeChapter: ChapterNavigationItem | null;
   prevChapter: ChapterEntry | null;
@@ -20,6 +21,7 @@ interface ChapterReaderProps {
 }
 
 export function ChapterReader({
+  documentKey,
   markdown,
   activeChapter,
   prevChapter,
@@ -35,19 +37,19 @@ export function ChapterReader({
 }: ChapterReaderProps) {
   const contentRef = useRef<HTMLDivElement>(null);
   const articleRef = useRef<HTMLElement>(null);
-  const prevChapterIdRef = useRef<string | null>(null);
+  const previousDocumentKeyRef = useRef<string | null>(null);
   const isProgrammaticScrollRef = useRef(false);
 
   // Restore scroll position when chapter finishes loading or changes
   useEffect(() => {
     if (!articleRef.current || !activeChapter || isLoading) return;
 
-    if (prevChapterIdRef.current !== activeChapter.id) {
-      prevChapterIdRef.current = activeChapter.id;
+    if (previousDocumentKeyRef.current !== documentKey) {
+      previousDocumentKeyRef.current = documentKey;
       isProgrammaticScrollRef.current = true;
       articleRef.current.scrollTop = activeChapter.scrollY ?? 0;
     }
-  }, [activeChapter?.id, activeChapter?.scrollY, isLoading]);
+  }, [documentKey, activeChapter?.scrollY, isLoading]);
 
   // Attach copy buttons to rendered code blocks
   useEffect(() => {
@@ -55,7 +57,7 @@ export function ChapterReader({
     const preElements = contentRef.current.querySelectorAll('pre');
 
     preElements.forEach((pre, index) => {
-      const codeId = `${activeChapter?.id ?? 'ch'}-code-${index}`;
+      const codeId = `${documentKey}-code-${index}`;
       let header = pre.previousElementSibling as HTMLElement | null;
       if (!header || !header.classList.contains('code-block-header')) {
         header = document.createElement('div');
@@ -103,7 +105,7 @@ export function ChapterReader({
         }
       }
     });
-  }, [markdown?.html, isLoading, copyStatus, onCopyCode, activeChapter?.id]);
+  }, [documentKey, markdown?.html, isLoading, copyStatus, onCopyCode]);
 
   const handleScroll = (event: Event) => {
     if (isProgrammaticScrollRef.current) {

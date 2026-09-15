@@ -6,12 +6,28 @@ import { calculateBufferSha256, createTarGz, WorkspaceManager } from '../package
 import { validatePackageDirectory } from '../tools/labkit/src';
 
 describe('workspace-manager and package registry', () => {
+  it('treats an empty persistent database placeholder as a new portable database', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'learnlab-empty-db-'));
+    try {
+      const workspaceDir = path.join(root, 'workspace');
+      await mkdir(workspaceDir, { recursive: true });
+      await writeFile(path.join(workspaceDir, 'workspace.db'), '');
+
+      await WorkspaceManager.initWorkspace(workspaceDir);
+
+      expect((await readFile(path.join(workspaceDir, 'workspace.db'), 'utf8')).trimStart()).toMatch(/^\{/);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it('uses workspace.db as the authoritative registry and creates it in portable mode', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'learnlab-ws-authoritative-'));
     try {
       const workspaceDir = path.join(root, 'workspace');
       await WorkspaceManager.initWorkspace(workspaceDir);
       expect((await import('node:fs/promises')).stat(path.join(workspaceDir, 'workspace.db'))).resolves.toBeDefined();
+      expect((await readFile(path.join(workspaceDir, 'workspace.db'), 'utf8')).trimStart()).toMatch(/^\{/);
     } finally {
       await rm(root, { recursive: true, force: true });
     }

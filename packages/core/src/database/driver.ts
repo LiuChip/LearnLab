@@ -1,5 +1,5 @@
 import { createRequire } from 'node:module';
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs';
 import * as path from 'node:path';
 
 export interface RunResult {
@@ -131,8 +131,10 @@ class PortableDatabaseConnection implements DatabaseConnection {
     // Read the old sidecar format once so existing portable databases can be upgraded.
     if (!existsSync(file) && existsSync(`${file}.json`)) file = `${file}.json`;
     if (!existsSync(file)) return;
+    const contents = readFileSync(file, 'utf8');
+    if (!contents.trim()) return;
     let parsed: unknown;
-    try { parsed = JSON.parse(readFileSync(file, 'utf8')); }
+    try { parsed = JSON.parse(contents); }
     catch (error) { throw new Error(`Portable database is corrupted: ${file}`, { cause: error }); }
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
       throw new Error(`Portable database has an invalid format: ${file}`);
@@ -316,7 +318,27 @@ function looksLikePortableDatabase(dbPath: string): boolean {
   try { return readFileSync(dbPath, 'utf8').trimStart().startsWith('{'); } catch { return false; }
 }
 
+function looksLikeSqliteDatabase(dbPath: string): boolean {
+  if (dbPath === ':memory:' || !existsSync(dbPath)) return false;
+  try { return readFileSync(dbPath).subarray(0, 16).toString('utf8') === 'SQLite format 3\0'; }
+  catch { return false; }
+}
+
+function isEmptyPersistentDatabase(dbPath: string): boolean {
+  if (dbPath === ':memory:' || !existsSync(dbPath)) return false;
+  try { return statSync(dbPath).size === 0; } catch { return false; }
+}
+
 export function createDatabaseConnection(dbPath: string, options?: { forcePortable?: boolean }): DatabaseConnection {
-  if (options?.forcePortable || !nodeSqlite || looksLikePortableDatabase(dbPath)) return new PortableDatabaseConnection(dbPath);
-  return new NodeSqliteConnection(dbPath);
+  if (options?.forcePortable || looksLikePortableDatabase(dbPath)) {
+    return new PortableDatabaseConnection(dbPath);
+  }
+  if (dbPath !== ':memory:' && (!existsSync(dbPath) || isEmptyPersistentDatabase(dbPath))) {
+    return new PortableDatabaseConnection(dbPath);
+  }
+  if (nodeSqlite) return new NodeSqliteConnection(dbPath);
+  if (looksLikeSqliteDatabase(dbPath)) {
+    throw new Error(`SQLite database requires a runtime with node:sqlite support: ${dbPath}`);
+  }
+  return new PortableDatabaseConnection(dbPath);
 }

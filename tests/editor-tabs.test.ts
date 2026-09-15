@@ -16,10 +16,6 @@ describe('editor tabs state', () => {
 		expect(createChapterTabId('package-a', 'intro')).not.toBe(createChapterTabId('package-b', 'intro'));
 	});
 
-	it('scopes chapter tab IDs by package', () => {
-		expect(createChapterTabId('package-a', 'intro')).not.toBe(createChapterTabId('package-b', 'intro'));
-	});
-
 	it('focuses an existing tab instead of opening a duplicate', () => {
 		const opened = openEditorTab(openEditorTab(createEditorTabsState(), chapterOne), chapterTwo);
 

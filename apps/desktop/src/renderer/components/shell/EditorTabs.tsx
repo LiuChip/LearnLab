@@ -18,7 +18,7 @@ export function EditorTabs({ tabs, activeTabId, onActivate, onClose }: EditorTab
 							aria-selected={tab.id === activeTabId}
 							onClick={() => onActivate(tab.id)}
 						>
-							<span aria-hidden="true">文</span>
+							<span class="workbench-tab-file-type" aria-hidden="true">M↓</span>
 							{tab.title}
 						</button>
 						<button type="button" class="workbench-editor-tab-close" aria-label={`关闭${tab.title}`} onClick={() => onClose(tab.id)}>
