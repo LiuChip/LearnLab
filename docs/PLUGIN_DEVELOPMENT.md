@@ -1,5 +1,9 @@
 # LearnLab Plugin Development (Experimental)
 
+完整的当前 API、导出符号、IPC channel、文件格式、安全边界和维护门禁请以
+[API_REFERENCE.md](API_REFERENCE.md) 为准。本文只保留插件作者需要的说明，不重复
+完整宿主 API 清单。
+
 > Status: experimental/internal. This document records the behavior that is
 > already implemented. It is not the final plugin SDK specification.
 >
@@ -10,8 +14,8 @@
 ## Current implementation boundary
 
 LearnLab currently implements plugin manifest parsing, a local installed-plugin
-registry, dependency resolution, and two renderer-facing query APIs. It also
-includes minimal experimental context types and a pure-logic permission resolver.
+registry, dependency resolution, renderer host queries, minimal experimental
+context types, and a pure-logic permission resolver.
 
 It does not yet load or execute plugin code. The context types and permission
 resolver are not runtime authorization mechanisms and are not a stable SDK.
@@ -118,112 +122,25 @@ Reading Markdown remains possible when the result is read-only. The current
 implementation does not start a plugin process, run an experiment, or expose
 an automatic permission grant when a dependency is missing.
 
-## Host-side query API currently exposed by preload
+## Host-side API
 
-The following APIs are exposed to the LearnLab renderer as
-`window.learnlab`. They are host application APIs, not the public plugin SDK.
-They are listed here because they are currently implemented and may be useful
-when testing plugin loading integration.
+当前唯一实现的 renderer 宿主入口是 `window.learnlab`。它包含插件查询以及包、
+workspace、数据库、配置、依赖和搜索方法；完整签名统一维护在
+[API_REFERENCE.md](API_REFERENCE.md)，对应 TypeScript 声明在
+`apps/desktop/src/preload/index.d.ts`。
 
-### Plugin queries
+插件查询为 `window.learnlab.plugins.list()` 和
+`window.learnlab.plugins.resolveForPackage(packageDir)`；它们只读取 manifest、
+注册表和解析结果，不执行插件代码。返回类型和全部宿主方法见
+[API_REFERENCE.md](API_REFERENCE.md)。
 
-```ts
-window.learnlab.plugins.list(): Promise<PluginManifest[]>
-window.learnlab.plugins.resolveForPackage(
-  packageDir: string
-): Promise<PluginResolution>
-```
+`plugins.list()` 读取有效 manifest，`plugins.resolveForPackage()` 验证受信实验包、
+读取禁用设置并返回解析结果；二者都不执行插件代码。
 
-`plugins.list()` reads valid manifests from the configured installed-plugin
-directory. Invalid manifests are skipped by the current registry scan.
-
-`plugins.resolveForPackage(packageDir)` validates that the package is inside
-the trusted LearnLab package scope, loads its manifest, reads disabled plugin
-settings, and returns the resolver result. It does not execute plugin code.
-
-The relevant result types are currently:
-
-```ts
-interface PluginResolution {
-  loadOrder: string[]
-  active: PluginManifest[]
-  issues: PluginResolutionIssue[]
-  cycles: string[][]
-  readOnly: boolean
-}
-
-interface PluginResolutionIssue {
-  requirement: { id: string; version: string }
-  availableVersions?: string[]
-  reason: 'missing' | 'incompatible' | 'disabled'
-}
-```
-
-### Other current host APIs
-
-The renderer preload also exposes the following application APIs. They are
-documented here for integration visibility only; they are not currently
-callable by plugin code:
-
-```ts
-window.learnlab.getExamplePackageDir()
-window.learnlab.loadPackage(packageDir)
-window.learnlab.readChapter(packageDir, chapterFile)
-
-window.learnlab.package.search(packageDir, options)
-window.learnlab.package.searchWorkspace(workspaceDir, options)
-window.learnlab.package.listChapters(packageDir)
-
-window.learnlab.workspace.getDefaultDir()
-window.learnlab.workspace.init(workspaceDir)
-window.learnlab.workspace.registerPackage(workspaceDir, packageDir)
-window.learnlab.workspace.unregisterPackage(workspaceDir, packageId)
-window.learnlab.workspace.listPackages(workspaceDir)
-window.learnlab.workspace.getPackage(workspaceDir, packageId)
-
-window.learnlab.database.getReadingProgress(packageDir, chapterId)
-window.learnlab.database.saveReadingProgress(packageDir, chapterId, contentHash, update?)
-window.learnlab.database.getAllProgress(packageDir)
-window.learnlab.database.recordExperimentAttempt(packageDir, attempt)
-window.learnlab.database.getExperimentAttempts(packageDir, labId)
-
-window.learnlab.config.read()
-window.learnlab.config.write(config)
-window.learnlab.config.exportJson(config)
-window.learnlab.config.importJson(rawJson, currentConfig)
-window.learnlab.config.backupInstructions()
-
-window.learnlab.dependencies.importBundled(workspaceDir, packageId, dependencyId)
-window.learnlab.dependencies.list(workspaceDir)
-window.learnlab.dependencies.prerequisites(workspaceDir)
-```
-
-These APIs are protected by Electron context isolation and main-process
-validation. They are currently exposed to the renderer, not to plugin code.
-They should not be copied into a plugin API contract. In particular, a future
-plugin host must expose a smaller allowlist derived from the plugin's effective
-permissions and current context.
-
-### Current host API inventory
-
-The following APIs are the currently implemented host bridge. Their presence
-does not grant filesystem, database, process, network, or plugin permissions
-to any plugin.
-
-| Namespace | Current responsibility |
-| --- | --- |
-| `loadPackage`, `readChapter` | Read a validated package and chapter through the main process. `readChapter` returns `{ content, contentHash }`. |
-| `package` | Search one package or a workspace, and list chapter navigation data. |
-| `workspace` | Resolve the default workspace, initialize it, register/unregister packages, and query registered packages. |
-| `database` | Read/write reading progress and record/query experiment-attempt summaries through the package database service. |
-| `config` | Read/write configuration, export/import JSON, and retrieve manual backup instructions. |
-| `dependencies` | Import a declared bundled dependency and query managed dependencies or external prerequisites. |
-| `plugins` | List installed plugin manifests and resolve the plugin set for one validated package. This does not start plugin code. |
-
-The exact TypeScript signatures are maintained in
-`apps/desktop/src/preload/index.d.ts`. The bridge is an application API, not a
-stable third-party extension point. In particular, `database`, `config`, and
-`dependencies` must not be handed directly to an untrusted plugin.
+The bridge is protected by Electron context isolation and main-process
+validation. It is exposed to the renderer, not to plugin code, and should not
+be copied into a plugin API contract. A future plugin host must expose a
+smaller allowlist derived from effective permissions and current context.
 
 ## Permissions and scope: current boundary
 

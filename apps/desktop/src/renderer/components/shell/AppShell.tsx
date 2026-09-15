@@ -4,6 +4,7 @@ import { BottomPanel } from './BottomPanel';
 import { EditorGroup } from './EditorGroup';
 import { PrimarySidebar } from './PrimarySidebar';
 import { StatusBar } from './StatusBar';
+import type { EditorTab } from '../../stores/tabStore';
 import type { WorkbenchActivityId } from '../../utils/workbench';
 
 interface AppShellProps {
@@ -18,6 +19,10 @@ interface AppShellProps {
 	onActivityChange: (activity: WorkbenchActivityId) => void;
 	onTogglePrimary: () => void;
 	onToggleBottomPanel: () => void;
+	tabs: EditorTab[];
+	activeTabId: string | null;
+	onActivateTab: (tabId: string) => void;
+	onCloseTab: (tabId: string) => void;
 	sidebar: ComponentChildren;
 	editor: ComponentChildren;
 }
@@ -34,6 +39,10 @@ export function AppShell({
 	onActivityChange,
 	onTogglePrimary,
 	onToggleBottomPanel,
+	tabs,
+	activeTabId,
+	onActivateTab,
+	onCloseTab,
 	sidebar,
 	editor
 }: AppShellProps) {
@@ -65,7 +74,14 @@ export function AppShell({
 				/>
 				{primaryVisible && <PrimarySidebar activeActivity={activeActivity}>{sidebar}</PrimarySidebar>}
 				<div class="workbench-center-column">
-					<EditorGroup>{editor}</EditorGroup>
+					<EditorGroup
+						tabs={tabs}
+						activeTabId={activeTabId}
+						onActivateTab={onActivateTab}
+						onCloseTab={onCloseTab}
+					>
+						{editor}
+					</EditorGroup>
 					<BottomPanel visible={bottomPanelVisible} onToggle={onToggleBottomPanel} />
 				</div>
 				<aside class="workbench-auxiliary-sidebar" aria-label="辅助侧栏">

@@ -65,5 +65,6 @@
 | [数据模型](DATA_MODEL.md) | 学习区数据库、实验包数据库和配置归属 |
 | [测试策略](TEST_STRATEGY.md) | MVP 测试范围和验证方式 |
 | [插件加载与 API 设计](superpowers/specs/2026-09-01-plugin-loading-and-scoped-permissions-design.md) | 插件上下文、权限分层、依赖链和加载规则 |
+| [当前 API 总表](API_REFERENCE.md) | 当前代码中已实现并暴露给外部的 API 与接口，包括 renderer bridge、workspace 包导出、文件格式、安全边界和 API 维护门禁 |
 | [依赖仓库与独立运行时](superpowers/specs/2026-09-02-dependency-repository-and-managed-runtimes-design.md) | 依赖源、独立运行时、包内置依赖和外部前置软件 |
 | [设计评估与开工报告](EVALUATION.md) | 当前评价、风险、未来功能和最小开工范围 |

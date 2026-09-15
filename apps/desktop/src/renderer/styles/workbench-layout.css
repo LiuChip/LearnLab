@@ -284,13 +284,43 @@
 .workbench-editor-tab {
 	display: inline-flex;
 	align-items: center;
-	gap: 7px;
-	padding: 0 14px;
+	padding: 0;
 	color: var(--ll-workbench-muted);
 	background: var(--ll-workbench-sidebar);
 	border-right: 1px solid var(--ll-workbench-border);
 	border-bottom: 2px solid transparent;
 	font-size: 11px;
+}
+
+.workbench-editor-tab > button {
+	display: inline-flex;
+	min-height: 33px;
+	align-items: center;
+	gap: 7px;
+	padding: 0 8px 0 14px;
+	color: inherit;
+	background: transparent;
+	border: 0;
+	font: inherit;
+	cursor: pointer;
+}
+
+.workbench-editor-tab-close {
+	width: 24px;
+	min-height: 33px;
+	padding: 0;
+	color: inherit;
+	background: transparent;
+	border: 0;
+	font-size: 15px;
+	cursor: pointer;
+}
+
+.workbench-editor-tab > button:hover,
+.workbench-editor-tab-close:hover,
+.workbench-editor-tab > button:focus-visible,
+.workbench-editor-tab-close:focus-visible {
+	background: var(--ll-workbench-active);
 }
 
 .workbench-editor-tab.is-active {
@@ -306,6 +336,14 @@
 
 .workbench-editor-area > .chapter-reader {
 	height: 100%;
+}
+
+.workbench-editor-empty {
+	display: grid;
+	height: 100%;
+	place-items: center;
+	color: var(--ll-workbench-muted);
+	font-size: 13px;
 }
 
 .workbench-auxiliary-sidebar {

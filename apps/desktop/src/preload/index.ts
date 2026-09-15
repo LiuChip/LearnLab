@@ -7,7 +7,9 @@ import type {
   ExperimentAttemptDetail,
   SearchOptions,
   SearchResult,
-  ChapterNavigationItem
+  ChapterNavigationItem,
+  ConfigStoreError,
+  SettingsTransferError
 } from '@learnlab/core';
 import type {
   ImportDependencyResult,
@@ -64,10 +66,10 @@ const api = {
       ipcRenderer.invoke('database:get-experiment-attempts', packageDir, labId)
   },
   config: {
-    read: () => ipcRenderer.invoke('config:read') as Promise<Result<AppConfig, { type: string; message: string }>>,
-    write: (config: AppConfig) => ipcRenderer.invoke('config:write', config),
-    exportJson: (config: AppConfig) => ipcRenderer.invoke('config:export-json', config),
-    importJson: (rawJson: string, currentConfig: AppConfig) => ipcRenderer.invoke('config:import-json', rawJson, currentConfig),
+    read: (): Promise<Result<AppConfig, ConfigStoreError>> => ipcRenderer.invoke('config:read'),
+    write: (config: AppConfig): Promise<Result<void, ConfigStoreError>> => ipcRenderer.invoke('config:write', config),
+    exportJson: (config: AppConfig): Promise<string> => ipcRenderer.invoke('config:export-json', config),
+    importJson: (rawJson: string, currentConfig: AppConfig): Promise<Result<AppConfig, SettingsTransferError>> => ipcRenderer.invoke('config:import-json', rawJson, currentConfig),
     backupInstructions: () => ipcRenderer.invoke('config:backup-instructions') as Promise<string>
   },
   dependencies: {

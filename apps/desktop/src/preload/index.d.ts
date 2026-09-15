@@ -6,7 +6,9 @@ import type {
   ExperimentAttemptDetail,
   SearchOptions,
   SearchResult,
-  ChapterNavigationItem
+  ChapterNavigationItem,
+  ConfigStoreError,
+  SettingsTransferError
 } from '@learnlab/core';
 import type {
   ImportDependencyResult,
@@ -48,10 +50,10 @@ export interface LearnLabAPI {
     getExperimentAttempts: (packageDir: string, labId: string) => Promise<ExperimentAttemptDetail[]>;
   };
   config: {
-    read: () => Promise<unknown>;
-    write: (config: AppConfig) => Promise<unknown>;
+    read: () => Promise<Result<AppConfig, ConfigStoreError>>;
+    write: (config: AppConfig) => Promise<Result<void, ConfigStoreError>>;
     exportJson: (config: AppConfig) => Promise<string>;
-    importJson: (rawJson: string, currentConfig: AppConfig) => Promise<unknown>;
+    importJson: (rawJson: string, currentConfig: AppConfig) => Promise<Result<AppConfig, SettingsTransferError>>;
     backupInstructions: () => Promise<string>;
   };
   dependencies: {

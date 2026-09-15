@@ -6,6 +6,14 @@ import { ContentsOutline } from './components/navigation/ContentsOutline';
 import { ChapterReader } from './components/content/ChapterReader';
 import { AppShell } from './components/shell/AppShell';
 import type { WorkbenchActivityId } from './utils/workbench';
+import {
+  activateEditorTab,
+  closeEditorTab,
+  createChapterTabId,
+  createEditorTabsState,
+  openEditorTab,
+  type EditorTabsState
+} from './stores/tabStore';
 import './styles/base.css';
 import './styles/theme.css';
 import './styles/markdown.css';
@@ -16,9 +24,11 @@ export function App() {
   const [workspacePackages, setWorkspacePackages] = useState<RegisteredPackage[]>([]);
   const [workspaceDir, setWorkspaceDir] = useState<string | null>(null);
   const [selectedPkgPath, setSelectedPkgPath] = useState<string>('');
+  const [selectedPkgId, setSelectedPkgId] = useState<string>('');
   const [activeActivity, setActiveActivity] = useState<WorkbenchActivityId>('chapters');
   const [primaryVisible, setPrimaryVisible] = useState(true);
   const [bottomPanelVisible, setBottomPanelVisible] = useState(false);
+  const [editorTabs, setEditorTabs] = useState<EditorTabsState>(createEditorTabsState);
 
   // The default workspace is the user's package registry. The repository's
   // examples are fixtures and must not become an implicit user package.
@@ -39,11 +49,14 @@ export function App() {
         const initialPackage = packages[0];
         if (!initialPackage) {
           setSelectedPkgPath('');
+            setSelectedPkgId('');
+            setEditorTabs(createEditorTabsState());
           store.clearView();
           return;
         }
 
         setSelectedPkgPath(initialPackage.path);
+        setSelectedPkgId(initialPackage.id);
         await store.loadPackageByPath(initialPackage.path);
       } catch (err) {
         if (cancelled) return;
@@ -78,18 +91,47 @@ export function App() {
     store.selectChapter(chapterId);
   };
 
+  const handleCloseTab = (tabId: string) => {
+    const nextState = closeEditorTab(editorTabs, tabId);
+    setEditorTabs(nextState);
+    const nextTab = nextState.tabs.find((tab) => tab.id === nextState.activeTabId);
+    if (nextTab?.packageId === selectedPkgId) {
+			store.selectChapter(nextTab.chapterId);
+    }
+  };
+
+  useEffect(() => {
+    const activeChapter = store.activeChapter;
+    if (!activeChapter || !selectedPkgId) return;
+    setEditorTabs((state) => openEditorTab(state, {
+      id: createChapterTabId(selectedPkgId, activeChapter.id),
+      title: activeChapter.title,
+      kind: 'chapter',
+      packageId: selectedPkgId,
+      chapterId: activeChapter.id
+    }));
+  }, [store.activeChapter?.id, selectedPkgId]);
+
   return (
     <AppShell
       packageName={store.packageName || '未选择实验包'}
       activeActivity={activeActivity}
       primaryVisible={primaryVisible}
       bottomPanelVisible={bottomPanelVisible}
+    tabs={editorTabs.tabs}
+    activeTabId={editorTabs.activeTabId}
       progress={Math.round(store.activeChapter?.progressPercent ?? 0)}
       pluginCount={store.loadedPluginCount}
       unreadMessages={0}
       onActivityChange={setActiveActivity}
       onTogglePrimary={() => setPrimaryVisible((visible) => !visible)}
       onToggleBottomPanel={() => setBottomPanelVisible((visible) => !visible)}
+    onActivateTab={(tabId) => {
+      setEditorTabs((state) => activateEditorTab(state, tabId));
+      const tab = editorTabs.tabs.find((candidate) => candidate.id === tabId);
+      if (tab?.packageId === selectedPkgId) store.selectChapter(tab.chapterId);
+    }}
+    onCloseTab={handleCloseTab}
       sidebar={
         <div class="workbench-sidebar-stack">
           {workspaceDir && workspacePackages.length > 1 && (
@@ -98,7 +140,10 @@ export function App() {
               value={selectedPkgPath}
               onChange={(e) => {
                 const path = (e.target as HTMLSelectElement).value;
+                const selectedPackage = workspacePackages.find((p) => p.path === path);
                 setSelectedPkgPath(path);
+                setSelectedPkgId(selectedPackage?.id ?? '');
+                setEditorTabs(createEditorTabsState());
                 store.loadPackageByPath(path);
               }}
             >
@@ -245,22 +290,24 @@ export function App() {
           )}
         </div>
       }
-      editor={
-        <ChapterReader
-          markdown={store.markdown}
-          activeChapter={store.activeChapter}
-          prevChapter={store.prevChapter}
-          nextChapter={store.nextChapter}
-          readonlyStatus={store.readonlyStatus}
-          isLoading={store.isLoading}
-          error={store.error}
-          copyStatus={store.copyStatus}
-          onNavigateChapter={store.selectChapter}
-          onToggleCompleted={store.toggleCompleted}
-          onCopyCode={store.copyCodeToClipboard}
-          onScrollChange={store.updateScroll}
-        />
-      }
+      editor={editorTabs.activeTabId ? (
+          <ChapterReader
+            markdown={store.markdown}
+            activeChapter={store.activeChapter}
+            prevChapter={store.prevChapter}
+            nextChapter={store.nextChapter}
+            readonlyStatus={store.readonlyStatus}
+            isLoading={store.isLoading}
+            error={store.error}
+            copyStatus={store.copyStatus}
+            onNavigateChapter={store.selectChapter}
+            onToggleCompleted={store.toggleCompleted}
+            onCopyCode={store.copyCodeToClipboard}
+            onScrollChange={store.updateScroll}
+          />
+        ) : (
+          <div class="workbench-editor-empty">选择一个章节以开始阅读。</div>
+        )}
     />
   );
 }
