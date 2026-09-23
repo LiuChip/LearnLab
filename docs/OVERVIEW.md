@@ -57,6 +57,7 @@
 | 文档 | 内容 |
 |:---|:---|
 | [UI 设计](UI_DESIGN.md) | 布局、学习区、笔记系统、视频联动 |
+| [Workbench 外观反馈与源码研究](reviews/2026-09-15-workbench-visual-feedback.md) | 对接后的 UI 遗漏、VSCode 源码参考及待补视觉/交互验收 |
 | [项目结构](PROJECT_STRUCTURE.md) | 源码仓库、插件语言边界、实验包和运行时目录 |
 | [架构设计](ARCHITECTURE.md) | 实验包、插件体系、技术栈、存储、适配器 |
 | [安全机制](SECURITY.md) | 权限模型、环境预检、崩溃诊断 |

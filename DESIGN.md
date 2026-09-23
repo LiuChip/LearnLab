@@ -16,6 +16,7 @@
 |:---|:---|
 | **[总览](docs/OVERVIEW.md)** | 产品定位、使命、服务人群、典型场景、项目联动 |
 | **[UI 设计](docs/UI_DESIGN.md)** | 布局设计、学习区多选项卡、视频联动、笔记系统、面板排列 |
+| **[Workbench 外观反馈与源码研究](docs/reviews/2026-09-15-workbench-visual-feedback.md)** | 对接后尚未修复的 UI 问题、VSCode 源码参考、实际体验范围和视觉验收清单 |
 | **[项目结构](docs/PROJECT_STRUCTURE.md)** | 源码仓库、插件语言边界、实验包和运行时目录 |
 | **[架构设计](docs/ARCHITECTURE.md)** | 实验包、插件体系、环境适配器、判定模式、技术栈、存储策略、LabKit |
 | **[安全机制](docs/SECURITY.md)** | 权限模型、安全级别、资源配额、环境预检、崩溃诊断 |

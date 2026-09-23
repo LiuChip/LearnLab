@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="28"
+     height="28"
+     viewBox="0 0 20 20"
+     fill="none"
+     stroke="currentColor"
+     stroke-width="1.35"
+     stroke-linecap="butt"
+     stroke-linejoin="round">
+  <g transform="translate(10 10) scale(1.9) translate(-10 -10.55)">
+    <path vector-effect="non-scaling-stroke"
+          d="M6.25 8H8.25 C8.25 5.6 11.85 5.6 11.85 8 H13.75 V9.9 C11.35 9.9 11.35 13.5 13.75 13.5 V15.5 H8.25 A2 2 0 0 1 6.25 13.5 Z" />
+  </g>
+</svg>
