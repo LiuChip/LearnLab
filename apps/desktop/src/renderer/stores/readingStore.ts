@@ -40,7 +40,7 @@ export function useReadingStore() {
   const [loadedPluginCount, setLoadedPluginCount] = useState(0);
 
   // Search state
-  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [searchQuery, setSearchQueryState] = useState<string>('');
   const [searchOptions, setSearchOptions] = useState<{
     caseSensitive: boolean;
     wholeWord: boolean;
@@ -363,21 +363,19 @@ export function useReadingStore() {
 
   const toggleSearchOption = useCallback(
     (key: 'caseSensitive' | 'wholeWord' | 'isRegex') => {
-      setSearchOptions((prev) => {
-        const next = { ...prev, [key]: !prev[key] };
-        if (searchQuery.trim() && searchResults) {
-          void runSearch(searchQuery, next, searchWorkspaceRef.current);
-        }
-        return next;
-      });
+      searchRequestRef.current += 1;
+      searchWorkspaceRef.current = null;
+      setSearchResults(null);
+      setIsSearching(false);
+      setSearchOptions((prev) => ({ ...prev, [key]: !prev[key] }));
     },
-    [searchQuery, searchResults, runSearch]
+    []
   );
 
-  const clearSearch = useCallback(() => {
+  const setSearchQuery = useCallback((query: string) => {
     searchRequestRef.current += 1;
     searchWorkspaceRef.current = null;
-    setSearchQuery('');
+    setSearchQueryState(query);
     setSearchResults(null);
     setIsSearching(false);
   }, []);
@@ -442,7 +440,6 @@ export function useReadingStore() {
     toggleCompleted,
     runSearch,
     toggleSearchOption,
-    clearSearch,
     copyCodeToClipboard
   };
 }

@@ -70,7 +70,6 @@ export function App() {
   const [quickQuery, setQuickQuery] = useState('');
   const quickInputRef = useRef<HTMLInputElement>(null);
   const lastErrorRef = useRef('');
-  const lastSearchResultRef = useRef<object | null>(null);
 
   const notify = useCallback((input: NotificationInput) => {
     setWorkbench((state) => addNotification(state, input));
@@ -153,16 +152,6 @@ export function App() {
   }, [store.error?.type, store.error?.message, notify]);
 
   useEffect(() => {
-    if (!store.searchResults || lastSearchResultRef.current === store.searchResults) return;
-    lastSearchResultRef.current = store.searchResults;
-    notify({
-      level: store.searchResults.error ? 'warning' : 'info',
-      title: store.searchResults.error ? '搜索未完成' : '搜索完成',
-      message: store.searchResults.error ?? `找到 ${store.searchResults.totalMatches} 处匹配。`
-    });
-  }, [store.searchResults, notify]);
-
-  useEffect(() => {
     if (quickOpenVisible) quickInputRef.current?.focus();
   }, [quickOpenVisible]);
 
@@ -237,6 +226,10 @@ export function App() {
     document.getElementById(headingId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }, []);
 
+  const searchCurrentWorkspace = useCallback((query: string) => {
+    if (query.trim()) void store.runSearch(query, undefined, workspaceDir);
+  }, [store.runSearch, workspaceDir]);
+
   let sidebar;
   switch (workbench.activeActivity) {
     case 'chapters':
@@ -251,8 +244,7 @@ export function App() {
           searching={store.isSearching}
           onQueryChange={store.setSearchQuery}
           onToggleOption={store.toggleSearchOption}
-          onSearch={() => { if (store.searchQuery.trim()) void store.runSearch(store.searchQuery, undefined, workspaceDir); }}
-          onClear={store.clearSearch}
+          onSearch={searchCurrentWorkspace}
           onSelectMatch={(match) => { void selectSearchMatch(match); }}
         />
       );

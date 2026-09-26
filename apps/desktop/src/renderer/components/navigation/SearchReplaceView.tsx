@@ -1,4 +1,6 @@
+import { useEffect, useRef } from 'preact/hooks';
 import type { SearchMatch, SearchOptions, SearchResult } from '@learnlab/core';
+import { scheduleLiveSearch } from '../../stores/searchInput';
 
 interface SearchReplaceViewProps {
   query: string;
@@ -7,8 +9,7 @@ interface SearchReplaceViewProps {
   searching: boolean;
   onQueryChange: (value: string) => void;
   onToggleOption: (key: 'caseSensitive' | 'wholeWord' | 'isRegex') => void;
-  onSearch: () => void;
-  onClear: () => void;
+  onSearch: (query: string) => void;
   onSelectMatch: (match: SearchMatch) => void;
 }
 
@@ -20,20 +21,34 @@ export function SearchReplaceView({
   onQueryChange,
   onToggleOption,
   onSearch,
-  onClear,
   onSelectMatch
 }: SearchReplaceViewProps) {
+  const cancelPendingSearch = useRef<(() => void) | null>(null);
+
+  useEffect(() => {
+    const cancel = scheduleLiveSearch(query, onSearch);
+    cancelPendingSearch.current = cancel;
+    return () => {
+      cancel();
+      if (cancelPendingSearch.current === cancel) cancelPendingSearch.current = null;
+    };
+  }, [query, options.caseSensitive, options.wholeWord, options.isRegex, onSearch]);
+
+  const refresh = () => {
+    cancelPendingSearch.current?.();
+    onSearch(query);
+  };
+
   return (
     <div class="workbench-search-view">
       <div class="workbench-search-toolbar">
-        <button type="button" class="workbench-icon-button" onClick={onSearch} disabled={!query.trim() || searching} title="刷新搜索结果">↻</button>
-        <button type="button" class="workbench-icon-button" onClick={onClear} disabled={!query && !results} title="清空搜索结果">≡×</button>
+        <button type="button" class="workbench-icon-button" onClick={refresh} disabled={!query.trim() || searching} title="刷新搜索结果">↻</button>
       </div>
       <form
         class="workbench-search-form"
         onSubmit={(event) => {
           event.preventDefault();
-          onSearch();
+          refresh();
         }}
       >
         <div class="workbench-search-input-row">

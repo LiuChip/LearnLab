@@ -4,7 +4,7 @@
 > “外部”包括 renderer、workspace 内其他包、LabKit 使用者和 manifest 消费者；
 > 不代表这些接口已经是第三方插件 SDK。
 >
-> 审计日期：2026-09-15
+> 审计日期：2026-09-26
 > 当前实现版本：0.1.0
 > 状态：实验性，随代码审查同步维护
 
@@ -108,6 +108,12 @@ runSearch(
   workspaceDir?: string | null
 ): Promise<void>
 ```
+
+搜索输入由 `components/navigation/SearchReplaceView.tsx` 以约 250ms 防抖驱动：非空
+查询调用 `runSearch`，空查询清除当前结果；大小写、全字和正则选项变化会使当前请求
+失效并重新搜索。顶部刷新按钮仍调用同一个入口，以便文件被外部修改后强制重扫。
+`stores/searchInput.ts` 的 `getSearchInputEffect` 和 `scheduleLiveSearch` 是 renderer
+内部辅助函数，不是插件或第三方 SDK API。
 
 传入 `workspaceDir` 时调用学习区搜索，切换实验包后保留已有结果；不传时调用当前
 实验包搜索，加载其他包会清除结果。这是当前 renderer 行为，不是公共搜索 SDK。

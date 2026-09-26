@@ -218,15 +218,6 @@ function SearchView({ state, dispatch }: Props) {
         >
           ↻
         </button>
-        <button
-          class="icon-button"
-          title="清空搜索结果"
-          aria-label="清空搜索结果"
-          disabled={!state.searchQuery}
-          onClick={() => send({ type: 'setSearchQuery', query: '' })}
-        >
-          ≡×
-        </button>
         <span class="toolbar-spacer" />
         <button
           class="icon-button"
