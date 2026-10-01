@@ -1,5 +1,7 @@
 # LearnLab Foundation and Non-UI Implementation Plan
 
+> Historical implementation plan (2026-09-02). Read [current status](../../STATUS.md) and [roadmap](../../ROADMAP.md) before using any unchecked items below; this file is not the active backlog.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 修复当前工程与安全问题，并完成 Plan.md 中低耦合、非 UI 的基础能力，使后续 UI 和高耦合模块可以建立在可测试的核心之上。

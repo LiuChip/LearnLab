@@ -632,6 +632,20 @@
   font-size: 10px;
 }
 
+.workbench-plugin-icon {
+  border: 0;
+}
+
+.workbench-plugin-icon > span {
+  width: 18px;
+  height: 18px;
+  display: block;
+  background: currentColor;
+  mask-position: center;
+  mask-repeat: no-repeat;
+  mask-size: contain;
+}
+
 .workbench-package-row {
   width: 100%;
   min-height: 50px;

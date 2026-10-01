@@ -1,6 +1,6 @@
 # 数据模型
 
-> 相关文档：[插件加载与 API 设计](superpowers/specs/2026-09-01-plugin-loading-and-scoped-permissions-design.md) · [依赖仓库与独立运行时](superpowers/specs/2026-09-02-dependency-repository-and-managed-runtimes-design.md) · [架构设计](ARCHITECTURE.md) · [安全机制](SECURITY.md) · [路线图](ROADMAP.md) · [未冻结决策清单](../UNFREEZE.md)
+> 相关文档：[插件加载与 API 设计](superpowers/specs/2026-09-01-plugin-loading-and-scoped-permissions-design.md) · [依赖仓库与独立运行时](superpowers/specs/2026-09-02-dependency-repository-and-managed-runtimes-design.md) · [架构设计](ARCHITECTURE.md) · [安全机制](SECURITY.md) · [路线图](ROADMAP.md) · [公开决策索引](DECISIONS.md)
 
 ## 目标
 
@@ -13,7 +13,9 @@ LearnLab 只保留两层数据库，避免把学习区组织关系和实验包�
 
 ### 数据决策的冻结边界
 
-存储归属已经冻结：学习区数据库负责包登记、软连接和共享依赖；实验包数据库负责章节、阅读进度和轻量实验摘要；详细运行数据放在 `experiment_history/`；插件设置随配置 JSON 导入/导出。完整表结构、索引、迁移版本、跨路径重连、搜索索引、历史清理和 UI 会话持久化仍未冻结，详见 [UNFREEZE.md](../UNFREEZE.md) 的 `DATA-*` 条目。
+存储归属已经确定：学习区数据库负责包登记、软连接和共享依赖；实验包数据库负责章节、阅读进度和轻量实验摘要；详细运行数据放在 `experiment_history/`；插件设置随配置 JSON 导入/导出。完整表结构、迁移版本、跨路径重连、搜索索引、历史清理和 UI 会话持久化仍未冻结，见[公开决策索引](DECISIONS.md)的 `DATA-*` 条目。
+
+当前代码使用 `<workspace>/workspace.db`、`<package>/package.db` 和 `<package>/experiment_history/`。早期示意图中的 `.learnlab/` 子目录不是现行持久化路径；如果未来迁移，必须设计兼容、备份与回滚，见[路线图 M2](ROADMAP.md)。
 
 ## 学习区数据库：`workspace.db`
 
@@ -57,27 +59,24 @@ LearnLab 的便携 JSON driver；现有便携文件继续按该格式打开。�
 | `reading_progress` | `chapter_id`, `scroll_y`, `completed_at`, `content_hash` | 断点续读和已读状态 |
 | `labs` | `lab_id`, `chapter_id`, `status`, `attempt_count` | 实验摘要，不保存完整日志 |
 | `package_metadata` | `declared_experiment_count`, `manifest_hash` | 作者声明的实验数和当前 manifest 指纹 |
-| `sessions` | `active_tab`, `scroll_state`, `language` | 会话恢复 |
-| `note_index` | `note_id`, `path`, `chapter_id`, `tags` | 后续版本的笔记检索索引，可重建 |
+| `sessions` | `key`, `value` | 已有内部表；完整 UI 会话恢复尚未接线 |
+| `note_index` | `note_id`, `path`, `chapter_id`, `tags` | 后续候选，当前未建表 |
 
-## 正文搜索索引
+## 正文搜索
 
-全局搜索面向当前打开的学习区，可以搜索该学习区内所有已登记实验包的章节 Markdown 正文；不跨学习区搜索。索引在后台建立，是可删除、可重建的缓存，不作为学习进度或实验历史的事实来源，放在 `<workspace>/.learnlab/tmp/search-index/`，不纳入备份要求。
+当前核心的 `searchWorkspace` 遍历当前学习区内已登记实验包的章节 Markdown 正文；**没有后台搜索索引文件**。现行 MVP 界面设计先开放当前文件查找，正式 renderer 尚需从现有学习区搜索入口改成这一交互。未来若开放跨文件搜索并引入索引，索引只能是可删除、可重建缓存，不能成为进度或历史的事实来源；具体路径和更新策略届时再定。
 
 ## 实验历史文件
 
-每次实验写入：
+当前历史模块每次写入一个 JSON 记录；真实实验执行和历史界面尚未接入：
 
 ```text
-<package>/.learnlab/experiment_history/
+<package>/experiment_history/
 └── <lab_id>/
-    ├── attempt-20260901-001.json
-    ├── attempt-20260901-001.input
-    ├── attempt-20260901-001.output
-    └── artifacts/
+    └── attempt-<timestamp>-<attempt-id>.json
 ```
 
-具体文件是否拆分由适配器决定，但必须能够阅读、复制和删除。数据库只保存历史索引或摘要，不以 SQLite 作为大日志和实验产物容器。
+未来若拆分输入、输出或产物文件，需要先确定清理与隐私规则。数据库只保存历史摘要，不把 `.db` 当作大日志和实验产物容器。
 
 ## 配置 JSON
 
@@ -120,7 +119,7 @@ LearnLab 的便携 JSON driver；现有便携文件继续按该格式打开。�
 - 笔记索引可以从 Markdown 文件重建；
 - 清理 `tmp/` 不得删除数据库和 `experiment_history/`；
 - 删除软连接不得删除目标目录；
-- 包升级不得覆盖 `.learnlab/` 动态区；
+- 包升级不得覆盖当前根目录的 `package.db` 和 `experiment_history/`；未来若增加独立运行临时目录，也不得覆盖用户数据；
 - 内容指纹变化时，只有对应章节阅读进度重置为 0%；新增且未改动的章节不影响原有章节进度；
 - `experiment_count` 由作者声明，manifest 更新时若作者声明变更则更新展示和统计；
 - `runtime_dependencies` 记录 LearnLab 管理的独立运行时需求；`external_prerequisites` 记录系统级前置软件，二者不能混为一谈；

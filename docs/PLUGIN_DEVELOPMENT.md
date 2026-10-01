@@ -89,8 +89,8 @@ breaking_change: false
 `breaking_change: true` is currently only an explicit update marker carried by
 the manifest. The current registry and resolver preserve the marker but do not
 compare plugin versions, block upgrades, migrate settings, or decide API
-compatibility from it. Those behaviors remain subject to `PL-08` in
-`UNFREEZE.md` and must not be implemented as a stable policy yet.
+compatibility from it. Those behaviors remain subject to `PL-08` in the
+[public decision index](DECISIONS.md) and must not be implemented as a stable policy yet.
 
 The current parser does not require `author`, `signature`, `api_version`,
 `activation`, or `permissions`. Their eventual requiredness and exact

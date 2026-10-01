@@ -2,6 +2,8 @@
 
 独立的 LearnLab Workbench UI 原型。它只使用模拟数据，不调用 Electron preload、数据库、插件宿主或实验运行时，因此可以独立迭代并在视觉方案确认后迁移到 `apps/desktop`。
 
+此应用保留为模拟交互试验场；正式桌面版已单独接入真实学习区和章节。最新产品状态见[文档状态](../../docs/STATUS.md)。
+
 ## 运行
 
 ```bash

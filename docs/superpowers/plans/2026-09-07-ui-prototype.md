@@ -1,5 +1,7 @@
 # LearnLab UI Prototype Implementation Plan
 
+> Historical prototype plan (2026-09-07). The mock-data app exists; these checkboxes are not the current desktop backlog. See [current status](../../STATUS.md).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build a separately runnable, interactive LearnLab Workbench UI prototype with mock data and no desktop runtime coupling.

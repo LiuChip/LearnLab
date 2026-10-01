@@ -1,6 +1,6 @@
 # 项目结构与语言边界
 
-> 相关文档：[架构设计](ARCHITECTURE.md) · [数据模型](DATA_MODEL.md) · [未冻结决策清单](../UNFREEZE.md)
+> 相关文档：[架构设计](ARCHITECTURE.md) · [数据模型](DATA_MODEL.md) · [公开决策索引](DECISIONS.md)
 >
 > 本文专门说明 LearnLab 的**源码仓库结构**、**运行时数据结构**和**实验包结构**。三者不是同一个目录，也不是同一种语言。
 
@@ -12,13 +12,13 @@ LearnLab 不是“所有内容都用 TypeScript 写”的项目。TypeScript 是
 |:---|:---|:---:|:---|
 | LearnLab 桌面宿主 | Electron + TypeScript + Preact/TSX | 是 | 窗口、阅读器、学习区、插件管理、IPC 等由宿主负责 |
 | 核心类型与协议 | TypeScript | 是 | manifest、权限、插件契约和跨进程消息的共同定义 |
-| 插件 SDK | TypeScript | MVP 优先 | 负责让插件访问受控 API；后续可提供其他语言的协议客户端 |
+| 插件 SDK | TypeScript | 后续计划 | 当前仅有空包占位，稳定 SDK 尚未开放 |
 | 官方插件桥接层 | TypeScript | 否，但优先 | 负责插件生命周期、UI、权限请求和外部进程桥接 |
 | 环境适配器进程 | 语言不限 | 否 | 例如 Python、Rust、C/C++、Java；通过 CLI/标准输入输出/本地协议接入 |
-| LabKit | TypeScript CLI | MVP 优先 | 校验、预览、打包实验包；GUI 后置 |
+| LabKit | TypeScript | 作者工具方向 | 当前有校验/预览模块，无可执行 CLI，打包未实现 |
 | 实验包正文 | Markdown + YAML/JSON + 资源 | 否 | 由作者决定实验使用的语言和工具 |
 | 实验代码 | 语言不限 | 否 | 可以是 SQL、Python、C/C++、Java、Shell 等，但执行必须经过插件和当前包作用域 |
-| 配置与数据 | JSON、SQLite、Markdown、普通文件 | 否 | 不属于 TypeScript 源码 |
+| 配置与数据 | JSON、逻辑 `.db`、Markdown、普通文件 | 否 | 新建持久 `.db` 当前默认便携 JSON driver，详见[数据模型](DATA_MODEL.md) |
 
 因此，**“项目使用 TypeScript”指的是宿主和工具链的实现语言，而不是对实验生态所有内容的语言限制。**
 
@@ -26,7 +26,7 @@ LearnLab 不是“所有内容都用 TypeScript 写”的项目。TypeScript 是
 
 ### 2.1 源码工程仓库
 
-这是开发者提交 Git 的目录，包含 LearnLab 本体、SDK、官方插件和 LabKit。它不等于用户的学习区。
+这是开发者提交 Git 的目录，包含 LearnLab 本体、SDK/官方插件占位结构和 LabKit 内部模块。它不等于用户的学习区。
 
 ### 2.2 用户学习区
 
@@ -38,7 +38,7 @@ LearnLab 不是“所有内容都用 TypeScript 写”的项目。TypeScript 是
 
 ## 3. 推荐的源码仓库结构
 
-MVP 采用 monorepo，但按职责分为 `apps`、`packages`、`plugins`、`tools` 和 `examples`：
+当前采用 monorepo，按职责分为 `apps`、`packages`、`plugins`、`tools` 和 `examples`。下图是**目标目录示意**，包含尚不存在的菜单/Fatal IPC、实验内容视图、LabKit 命令入口等；实际文件以仓库和[API 总表](API_REFERENCE.md)为准：
 
 ```text
 learnlab/                              # LearnLab 源码仓库
@@ -182,7 +182,7 @@ learnlab/                              # LearnLab 源码仓库
 一个最小实验包可以是：
 
 ```text
-sql-intro/                          # 可压缩为 .labpkg
+sql-intro/                          # 当前支持目录型加载；归档格式待实现
 ├── manifest.yaml                   # 包元数据、实验数量、插件和运行依赖
 ├── chapters/
 │   ├── 01-select.md                # Markdown 正文
@@ -197,19 +197,17 @@ sql-intro/                          # 可压缩为 .labpkg
 ├── assets/                         # 图片、视频和其他资源
 ├── notes/                          # 包内可选笔记资源
 ├── bundled-dependencies/           # 可选：小众独立运行时的分发来源
-└── .learnlab/                      # 运行后生成
-    ├── package.db
-    ├── experiment_history/
-    └── tmp/
+├── package.db                      # 当前已用的逻辑数据库路径
+└── experiment_history/             # 历史模块当前使用的路径
 ```
 
 实验包中的代码由插件决定如何解释和执行。LearnLab 核心只负责：
 
 1. 解析包结构和 manifest；
-2. 加载 Markdown 和静态资源；
+2. 加载 Markdown 章节；资源访问仍需按类型补充安全路径；
 3. 根据包声明解析所需插件；
-4. 把当前实验包作用域交给获得授权的插件；
-5. 保存阅读进度和实验历史。
+4. 未来把当前实验包作用域交给获得授权的插件；当前只完成上下文/权限纯逻辑；
+5. 保存阅读进度，并提供实验历史的存储模块；真实执行尚未接入。
 
 ## 6. 依赖来源和最终归档
 
@@ -225,15 +223,15 @@ sql-intro/                          # 可压缩为 .labpkg
 ├── plugins/                         # 已安装插件
 └── workspaces/
     └── 学习区/
-        ├── .learnlab/workspace.db   # 包清单、软连接和学习区状态
+        ├── workspace.db             # 包清单、软连接和学习区状态
         ├── dependencies/            # 该学习区共享的实际独立运行时
         │   ├── org.llvm.clang/18.1.8/darwin-arm64/<sha256>/
         │   ├── org.mysql.runtime/8.4.0/linux-x64/<sha256>/
         │   └── ...
-        ├── sql-intro/               # 解压后的实验包
-        │   └── .learnlab/package.db
+        ├── sql-intro/               # 当前为目录型实验包
+        │   └── package.db
         └── python-basics/
-            └── .learnlab/package.db
+            └── package.db
 ```
 
 源码仓库的 `packages/` 与用户学习区的“实验包”没有关系；前者是开发者代码目录，后者是用户内容目录。为了避免混淆，文档中尽量使用：
@@ -246,7 +244,7 @@ sql-intro/                          # 可压缩为 .labpkg
 
 第一版只要求：
 
-- 宿主、核心类型、SDK、LabKit 使用 TypeScript；
+- 宿主、核心类型与 LabKit 内部模块使用 TypeScript；插件 SDK 尚未开放；
 - 官方插件优先使用 TypeScript 编写桥接层；
 - 外部环境通过进程或 CLI 接入，不把 Python/MySQL/C++ 等环境源码塞进 LearnLab 核心；
 - 实验包只要能被 `manifest.yaml` 描述、被阅读器加载、被相应插件执行即可；

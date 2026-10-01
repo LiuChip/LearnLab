@@ -4,7 +4,7 @@
 > “外部”包括 renderer、workspace 内其他包、LabKit 使用者和 manifest 消费者；
 > 不代表这些接口已经是第三方插件 SDK。
 >
-> 审计日期：2026-09-26
+> 接口审计日期：2026-09-26；2026-10-01 重新核对文档状态与文件格式边界，未在本轮新增公开接口
 > 当前实现版本：0.1.0
 > 状态：实验性，随代码审查同步维护
 
@@ -371,7 +371,7 @@ capability ID、授权弹窗/撤销/持久化、运行时 context 注入、`regi
 - `window.learnlab` 只给受信 renderer，不是插件隔离层；桥接和 core 返回的绝对
   路径不得传给不受信任插件。
 - manifest 的 `permissions`、`signature`、`api_version` 当前不产生运行时授权或信任结论。
-- 每轮实现前读取 `Plan.md`、`UNFREEZE.md`、相关设计文档和本表。
+- 每轮实现前读取[路线图](ROADMAP.md)、[公开决策索引](DECISIONS.md)、相关设计文档和本表；本地迭代可补读被 Git 忽略的 `Plan.md`、`UNFREEZE.md`。
 - 每轮写代码后扫描 diff 中新增/改变的 `export`、package `exports`、
   `contextBridge`、`ipcMain.handle`、manifest 字段、文件格式和 CLI 入口。
 - 本轮新增或改变的接口必须与代码在同一轮登记本文，并说明稳定性、安全边界和

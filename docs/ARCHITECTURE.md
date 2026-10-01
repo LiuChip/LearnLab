@@ -1,10 +1,12 @@
 # 架构设计
 
-> 相关文档：[插件加载与 API 设计](superpowers/specs/2026-09-01-plugin-loading-and-scoped-permissions-design.md) · [总览](OVERVIEW.md) · [UI 设计](UI_DESIGN.md) · [安全机制](SECURITY.md) · [路线图](ROADMAP.md) · [数据模型](DATA_MODEL.md) · [测试策略](TEST_STRATEGY.md) · [依赖仓库与独立运行时](superpowers/specs/2026-09-02-dependency-repository-and-managed-runtimes-design.md) · [未冻结决策清单](../UNFREEZE.md)
+> 相关文档：[插件加载与 API 设计](superpowers/specs/2026-09-01-plugin-loading-and-scoped-permissions-design.md) · [总览](OVERVIEW.md) · [UI 设计](UI_DESIGN.md) · [安全机制](SECURITY.md) · [路线图](ROADMAP.md) · [数据模型](DATA_MODEL.md) · [测试策略](TEST_STRATEGY.md) · [依赖仓库与独立运行时](superpowers/specs/2026-09-02-dependency-repository-and-managed-runtimes-design.md) · [公开决策索引](DECISIONS.md)
 >
 > 2026-09-01 更新：确认插件优先架构、有限作用域、独立插件宿主、执行监督、分层存储和按依赖链加载插件
 
 > 2026-09-04 更新：桌面 UI 直接采用 VSCode Workbench 对标方案；UI 由原生 Menubar、应用内命令入口、功能栏、主侧边栏、标签页、中央主窗口、可选辅助侧栏、底部面板、状态栏和独立通知宿主组成。普通视图的位置可由用户选择，AI 等明确辅助插件默认进入辅助侧栏；Fatal 由主进程隔离普通窗口并保留错误展示 UI。
+
+> 2026-10-01 同步：本文包含目标设计和早期示意稿。已实现部分以[文档状态](STATUS.md)和[API 总表](API_REFERENCE.md)为准；`.labpkg`、实验执行、插件宿主、完整会话恢复和 LabKit CLI 尚未交付。
 
 ## 应用实例与窗口生命周期
 
@@ -18,7 +20,7 @@
 
 - **已冻结**：单实例生命周期、核心模块边界、Workbench 区域职责、全局插件与当前包插件的加载方向、`AppContext`/`PackageContext` 的作用域意图，以及工作区/实验包/历史文件的存储分层。
 - **部分冻结**：普通视图可进入主区域或辅助侧栏、插件 UI 注册、执行监督和依赖运行时的总体方向。
-- **尚未冻结**：上下文的完整字段、能力级权限名、插件宿主进程拓扑、IPC 协议、运行时平台矩阵和 UI 状态持久化。具体条目及冻结条件见 [UNFREEZE.md](../UNFREEZE.md)。
+- **尚未冻结**：上下文的完整字段、能力级权限名、插件宿主进程拓扑、IPC 协议、运行时平台矩阵和 UI 状态持久化。具体条目及冻结条件见[公开决策索引](DECISIONS.md)。
 
 ## 🖥️ Workbench UI 架构
 
@@ -79,7 +81,7 @@ apps/desktop/src/renderer/
 
 ## 📦 核心概念：实验包（Lab Package）
 
-LearnLab 是**实验包播放器**。实验包 = 一个 ZIP 文件（`.labpkg`）或一个文件夹，包含：
+LearnLab 是**实验包播放器**。当前 loader 支持目录型实验包；`.labpkg` 归档和导入属于后续计划。下面是目标包结构示意：
 
 ```
 实验包/
@@ -100,7 +102,7 @@ LearnLab 是**实验包播放器**。实验包 = 一个 ZIP 文件（`.labpkg`�
 └── external-prerequisites.yaml# 可选：需要用户自行安装的软件声明
 ```
 
-用户双击 `.labpkg` 导入 → 解压到学习区 → 实验包出现在左侧目录树 → 开始学习。
+目标导入路径是选择 `.labpkg`、安全解压到学习区并登记后阅读；目前界面没有该入口，不能通过双击归档完成导入。
 
 ### 作者元数据（manifest）
 
@@ -130,7 +132,7 @@ LearnLab 是**实验包播放器**。实验包 = 一个 ZIP 文件（`.labpkg`�
 - Minecraft：一个世界 = 一个存档（世界里可以有多个 mod）
 - LearnLab：一个学习区 = 一个学科目录（目录里可以有多个实验包）
 
-**导入流程（类似 MC 导入整合包）**：
+**目标导入流程（尚未实现归档导入）**：
 
 ```
 用户获得 .labpkg（压缩包，比如从 U 盘/源下载）
@@ -149,8 +151,7 @@ LearnLab 解压 .labpkg → 装入学习区目录
 
 ```
 学习区目录（可自定义位置，默认 ~/.learnlab/workspaces/）
-├── .learnlab/
-│   └── workspace.db                 # 实验包、软连接、顺序和依赖状态
+├── workspace.db                     # 当前代码：实验包、软连接和依赖状态
 ├── dependencies/                    # 当前学习区共享的已安装依赖
 │   ├── python/<dependency-fingerprint>/
 │   ├── mysql/<dependency-fingerprint>/
@@ -158,7 +159,8 @@ LearnLab 解压 .labpkg → 装入学习区目录
 ├── java-intro/                      # 实验包 ①（解压后的内容）
 │   ├── chapters/
 │   ├── manifest.yaml
-│   └── .learnlab/                   # 该包的进度/尝试历史/用户文件
+│   ├── package.db                   # 当前代码：章节与进度
+│   └── experiment_history/          # 当前历史模块
 ├── java-multithread/                # 实验包 ②
 │   └── ...
 └── java-design-patterns/            # 实验包 ③
@@ -202,7 +204,7 @@ LearnLab 解压 .labpkg → 装入学习区目录
 - **章节阅读完成**：章节内容页面滚动到底部时，标记该章节已读；关闭前保存当前位置和滚动位置。
 - **学习区/实验包阅读百分比**：按实际发现的章节 Markdown 数量计算；章节滚动到底视为完成。实验卡片数量不参与阅读百分比。
 - **实验数量展示**：实验包的实验总数由作者在 manifest 中声明；LearnLab 可以扫描并校验实际实验卡片，但不通过扫描结果替换作者声明的统计口径。
-- **实验状态**：实验另行显示“未开始 / 进行中 / 已完成 / 用户自判”，不改变阅读百分比。
+- **实验结果**：实验记录判定结果和用户自判，不改变阅读百分比；核心不维护全局“实验运行中”展示状态。执行监督器仅在执行与关闭标签等生命周期边界跟踪本实验进程。
 - **内容更新**：如果章节内容指纹没有变化，保留原有已读状态；如果内容发生变化，该章节重置为 0%，再重新计算包和学习区百分比。
 - **答案查看**：查看答案后通过不额外标记，尝试历史中仍保留实际操作记录。
 
@@ -320,7 +322,7 @@ manifest.yaml 不写 locales 字段（或只有一个语言）→ 单语言包
 │ - Birthday: DATE                        │
 │                                         │
 │ 尝试次数: 2/5         状态: ❌ 未通过    │
-│ [开始实验]  [重置]  [💡 查看提示]        │
+│ [打开实验]  [💡 查看提示]                │
 └─────────────────────────────────────────┘
 ```
 
@@ -463,14 +465,16 @@ validation:
 - **作者**可以在检查项里附带 `message`（如"StudentID 应为 CHAR(12)"）——但这是作者写的说明，不是程序推断的
 - **提示系统**按 `hint_level` 逐级引导，而不是程序直接说"你这里错了，因为..."
 
+判定失败的来源也必须明确区分：手动判定由用户主动选择失败，历史记录的固定理由为“用户判定实验失败”；自动判定由声明的判定器插件执行，失败理由和分项反馈由该插件返回。LearnLab 核心不替插件推断失败原因，只负责校验结果结构、持久化记录并在实验历史中展示。
+
 ---
 
 ## 🧪 实验生命周期
 
 ```
-用户点击 [开始实验]
+用户在 Markdown 卡片点击 [打开实验] → 打开或聚焦实验标签
        ↓
-执行 init 脚本（初始化环境）
+实验标签内按需执行 init 脚本（初始化环境）
        ↓
 操作区唤起对应 CLI
        ↓
@@ -723,6 +727,7 @@ interface ValidatorProvider {
 
 - 校验适配器生成的执行计划是否落在允许的命令、目录和环境变量范围内；
 - 负责超时、取消、输出大小、进程树回收和孤儿进程清理；
+- 关闭实验标签前检查本实验启动的程序和专用依赖进程；尚有存活进程时由 UI 提供“强制退出 / 取消”，确认回收并核实退出后才关闭标签；共享依赖及其他实验的进程不在此标签的清理范围内；
 - 记录标准化的 `RunResult`，再交给判定器；
 - 适配器崩溃只影响当前实验，不应拖垮 LearnLab 主界面；
 - 适配器可提供平台相关实现，但不能绕过内核监督器直接启动不受控进程。
@@ -782,13 +787,12 @@ LearnLab 是"播放器"，还需要一个"制作器"——让不会编程的人�
    ├── bundled-dependencies/ # 可选：小众独立运行时
    └── external-prerequisites.yaml # 可选：系统软件声明
 
-2. 打包为 .labpkg（其实就是 ZIP）
-   zip -r my-lab-package.labpkg .
+2. 当前保留目录型实验包；`.labpkg` 格式、版本和安全打包命令将在 LabKit CLI 阶段确定。
 ```
 
 ### 创作者 CLI（优先于 GUI）
 
-在完整可视化编辑器之前，先提供轻量 CLI：`labkit validate`、`labkit preview`、`labkit pack`、`labkit inspect-permissions`。它负责校验包结构、查找资源断链、预览 Markdown、生成 `.labpkg` 和检查权限声明；不要求模拟不同平台。
+当前 LabKit 有内部校验/预览模块，但没有可执行 CLI，`pack` 也未实现。后续优先提供 `validate`、`preview`、`pack` 的 CLI 入口；是否加入 `inspect-permissions` 随真实作者需求决定。归档格式和校验边界需先确定，见[路线图 M5](ROADMAP.md)。
 
 ### 可视化编辑器——LabKit（Phase 2）
 
@@ -838,7 +842,7 @@ LabKit 是一个**图形化的实验包创作工具**，可以独立发布，也
 
 ### 实验包编辑能力（核心 vs LabKit 分工）
 
-LearnLab 的设计原则是：**播放器自带轻编辑，重编辑交给 LabKit**。
+早期方案曾提出“播放器轻编辑、LabKit 重编辑”；当前 MVP 采用**播放器负责阅读，独立 LabKit 负责作者工具**。以下轻编辑清单仅保留为待评估方案，均不是当前能力或已承诺的 M1-M5 交付物：
 
 **核心自带（轻编辑）**：
 
@@ -847,31 +851,31 @@ LearnLab 的设计原则是：**播放器自带轻编辑，重编辑交给 LabKi
 编辑 manifest.yaml         → YAML 编辑器（带语法校验）
 编辑实验卡片 YAML          → YAML 编辑器（带卡片 schema 提示）
 添加/删除章节              → 目录树右键菜单
-新建笔记（已有）            → 自动保存为 .md
+新建笔记                   → 自动保存为 .md（尚未接入）
 导出为 .labpkg             → 一键打包
 ```
 
-**LabKit 负责（重编辑）**：可视化、拖拽式、面向非编程用户的实验包创作。
+**LabKit 的远期方向（重编辑）**：可视化、拖拽式、面向非编程用户的实验包创作；当前还没有 GUI。
 
-**两者可以互相调用**——在 LearnLab 里觉得"这个实验包需要大改"，点"在 LabKit 中打开" → 自动切换到 LabKit，改完保存后 LearnLab 自动刷新喵~！
+播放器与 GUI LabKit 的互相调用只是远期设想，不属于现行 MVP 接口。
 
 ---
 
 ## 📄 Markdown 渲染架构
 
-LearnLab 用 **标准解析器 + 标准扩展 + 自定义渲染层** 的策略——**不魔改解析器**，但深度定制渲染效果。这样语法保持兼容（Obsidian/Typora 也能显示），渲染效果却只有 LearnLab 有喵~！
+LearnLab 使用标准 Markdown 解析与安全 HTML 输出。当前基础能力和下述扩展设想必须分开阅读；实验容器、公式及图表尚未接入。
 
 ### 解析层（标准，不魔改）
 
 | 组件                         | 用途                                           |
 | :--------------------------- | :--------------------------------------------- |
-| **markdown-it**              | 业界标准 Markdown 解析器（VS Code 同款）       |
-| **GFM 扩展**                 | 表格、任务列表、删除线                         |
-| **markdown-it-admonition**   | 彩色旁注（NOTE/TIP/IMPORTANT/WARNING/CAUTION） |
-| **markdown-it-texmath**      | LaTeX 公式（KaTeX 渲染）                       |
-| **markdown-it-front-matter** | YAML 元数据解析                                |
+| **当前：unified + remark-parse** | 解析章节 Markdown |
+| **当前：remark-gfm** | 表格、任务列表、删除线等 GFM 语法 |
+| **当前：remark-frontmatter / front matter 解析** | 提取章节元数据 |
+| **当前：remark-rehype + rehype-sanitize** | 生成经过清理的 HTML；不启用原始 HTML 解析 |
+| **后续：扩展容器、公式、图表** | 需单独设计语法、渲染、安全和插件边界 |
 
-### 渲染层（LearnLab 的定制空间）
+### 渲染层（以下为历史效果设想，当前未实现）
 
 **Admonition 彩色旁注**（`> [!类型]` 语法，兼容 Obsidian/Typora/MkDocs）：
 
@@ -892,7 +896,7 @@ LearnLab 用 **标准解析器 + 标准扩展 + 自定义渲染层** 的策略�
 > 这是危险操作（红色块）
 ```
 
-LearnLab 渲染成**漂亮的渐变色卡片**，并支持自定义图标和折叠：
+早期稿设想把旁注渲染为有图标和折叠能力的卡片；当前不能按此效果验收：
 
 ```
 ┌─ 📘 NOTE ────────────────────────┐
@@ -900,7 +904,7 @@ LearnLab 渲染成**漂亮的渐变色卡片**，并支持自定义图标和折�
 └──────────────────────────────────┘
 ```
 
-**LearnLab 独有容器**（`::: 类型` 语法，markdown-it-container 机制）：
+**候选的 LearnLab 容器**（`::: 类型` 语法尚未实现）：
 
 ```markdown
 ::: lab-card{id="ch2-3-1"}
@@ -932,7 +936,7 @@ graph LR; A-->B
 | **魔改解析器** ❌            | 可以发明任意语法                                            | 与生态脱节；内容换平台就废；维护成本高 |
 | **标准扩展 + 自定义渲染** ✅ | 语法通用（Obsidian 也能显示同样的旁注）；渲染惊艳；维护简单 | 语法受限于既有生态（但已很丰富，够用） |
 
-**关键原则**：内容不锁死在 LearnLab——教授写的教材，学员可以拿到任何 Markdown 编辑器里继续阅读，LearnLab 的价值在于**渲染体验**而不是**语法垄断**喵~！
+**关键原则**：基础教材应能用通用 Markdown 编辑器继续阅读。实验、公式和图表等扩展若引入，应有可读的降级文本，并经过安全验证。
 
 ---
 
@@ -986,24 +990,21 @@ LearnLab 的视觉风格遵循同样的"极简内核 + 插件扩展"理念——
 
 ## 🗂️ 文件系统规范：学习区、实验包与动态运行区
 
-LearnLab 采用“学习区数据库 + 实验包数据库”的两层模型。学习区负责组织实验包、软连接和共享依赖；实验包负责自身的实验状态、阅读进度和运行历史。MySQL、Python、C++ 以及其他环境均由插件提供；核心内置的 SQLite 只用于这些 LearnLab 元数据，不承担任何 MySQL 环境职责。
+LearnLab 采用“学习区数据库 + 实验包数据库”的两层模型。学习区负责组织实验包、软连接和共享依赖；实验包负责自身的实验状态、阅读进度和运行历史。MySQL、Python、C++ 等环境计划由插件提供；`.db` 是 LearnLab 元数据的逻辑文件名，新建持久文件当前默认使用便携 JSON driver，不承担 MySQL 环境职责。
 
 ### 学习区目录
 
 ```text
 学习区/
-├── .learnlab/
-│   └── workspace.db       # 实验包、软连接、显示顺序和依赖状态
+├── workspace.db           # 当前代码：包、软连接和依赖状态
 ├── dependencies/          # 当前学习区共享依赖（按指纹复用）
 │   ├── mysql/<fingerprint>/
 │   └── python/<fingerprint>/
 ├── mysql-intro/           # 实验包目录，可为真实目录或软连接
 │   ├── manifest.yaml
 │   ├── chapters/
-│   └── .learnlab/
-│       ├── package.db     # 实验状态、章节阅读进度、会话状态摘要
-│       ├── tmp/            # 临时环境和编译产物
-│       └── experiment_history/ # 每次实验的输入、输出、错误和通过结果
+│   ├── package.db         # 当前代码：章节与阅读进度、实验摘要
+│   └── experiment_history/ # 当前历史模块：每次尝试的 JSON 记录
 └── python-intro/
     └── ...
 ```
@@ -1012,8 +1013,8 @@ LearnLab 采用“学习区数据库 + 实验包数据库”的两层模型。�
 
 | 数据               | 所在位置                        | 说明                                                                                                        |
 | :----------------- | :------------------------------ | :---------------------------------------------------------------------------------------------------------- |
-| 学习区内有哪些包   | 学习区 `.learnlab/workspace.db` | 记录包路径、软连接、顺序、展示信息和依赖状态                                                                |
-| 实验包有哪些实验   | 实验包 `.learnlab/package.db`   | 使用 manifest 的 `experiment_count`，扫描结果用于校验和定位                                                 |
+| 学习区内有哪些包   | 学习区 `workspace.db`           | 记录包路径、软连接、顺序、展示信息和依赖状态                                                                |
+| 实验包有哪些实验   | 实验包 `package.db`             | 使用 manifest 的 `experiment_count`，扫描结果用于校验和定位                                                 |
 | 阅读位置和已读状态 | 实验包 `package.db`             | 按章节内容指纹保存                                                                                          |
 | 每次运行的细节     | `experiment_history/`           | 保存代码/命令、输出、报错、判定和产物                                                                       |
 | 用户设置和插件设置 | `~/.learnlab/config.json`       | 可手动导出/导入                                                                                             |
@@ -1032,8 +1033,8 @@ LearnLab 采用“学习区数据库 + 实验包数据库”的两层模型。�
 ### 静态区与动态区
 
 - `manifest.yaml`、`chapters/` 等是包静态内容；升级时只替换静态文件。
-- `.learnlab/tmp/` 可安全清理，不得影响阅读进度或实验历史。
-- `.learnlab/package.db` 和 `experiment_history/` 属于用户运行数据，普通包升级保留。
+- 未来临时目录若引入，必须与阅读进度和历史分离，允许安全清理。
+- `package.db` 和 `experiment_history/` 属于用户数据，普通包升级必须保留。
 - 用户编辑官方包时仍应使用“Fork/派生副本”，避免升级覆盖作者内容。
 
 ## 📦 实验包市场（源机制）
@@ -1169,29 +1170,29 @@ LearnLab 检查 prerequisites
 
 ## 🔎 当前学习区全文搜索
 
-搜索面向当前已经打开的学习区，MVP 索引该学习区所有已登记实验包的章节 Markdown 正文，不跨学习区搜索。用户打开学习区并开始学习后，LearnLab 在后台建立可重建索引；索引未完成时仍可使用基础文本搜索。搜索结果显示实验包名称和章节路径，并跳转到对应章节和匹配位置。索引属于缓存，不是学习数据的唯一事实来源，损坏或删除后可以重新生成。实验卡片和笔记搜索可以在后续版本按需加入。
+核心已提供对当前学习区已登记实验包的遍历式全文搜索能力，但正式 UI 的 MVP 仅开放当前章节文件的查找：范围入口显示“当前文件 / 当前实验包 / 当前学习区”三个文字选项，后两项暂不可用。选当前文件时，Activity Bar 转到查找模式，在当前教程章节文件内定位匹配，不生成跨文件结果标签。后续开放实验包/学习区搜索时，跨文件结果进入独立标签；索引若引入，应是可删除、可重建的缓存，而非学习数据的唯一事实来源。实验卡片和笔记搜索仍可后续加入。现有正式 renderer 仍调用学习区搜索，须按[路线图 M1](ROADMAP.md)修正，不能视为已符合此交互。
 
-## 🧠 记忆系统（断点续读）
+## 🧠 记忆系统（断点续读目标）
 
 > 设计决策（2026-08-14）：**用户学到哪、看到哪、用什么语言看的，关闭时必须留记录**——不然每次打开都从头开始，体验灾难喵~ (´･ω･`)
 
 ### 记录内容
 
-LearnLab 在关闭/切换页面时自动记录（本地 SQLite，无需用户手动保存）：
+当前已持久化章节阅读进度；以下“当前位置、打开标签、实验步骤和语言”的完整恢复是目标设计，尚未全部接线。新建持久 `.db` 默认是便携 JSON driver，而非 SQLite：
 
 | 记录项           | 示例                               | 用途                        |
 | :--------------- | :--------------------------------- | :-------------------------- |
 | **当前位置**     | `ch2-3`（第 2 章第 3 节）          | 重新打开 → 直接跳到上次位置 |
 | **滚动位置**     | `scroll_y: 1450`                   | 长文档也不用从头读          |
 | **打开的标签页** | `["ch2-3", "lab-2-3-1", "note-1"]` | 恢复多标签工作状态          |
-| **当前实验状态** | 实验 2-3-1 尝试中、步骤进度        | 实验中断续做                |
+| **当前实验状态** | 单次实验 2-3-1 的尝试记录和步骤    | 查看历史；不维护全局“运行中” UI 状态 |
 | **显示语言**     | `zh-CN`                            | 按用户当时看的语言恢复      |
 
 ### 恢复策略
 
 ```
-用户关闭 LearnLab → 自动保存所有会话状态
-用户重新打开 LearnLab → 读取上次会话 → 提示：
+目标：用户关闭 LearnLab → 保存已确定的会话状态
+目标：用户重新打开 LearnLab → 读取上次会话 → 提示：
   "上次学到「2.3 数据类型」，继续？[继续] [从头开始]"
 
 → 点击继续：恢复到 章节 + 滚动位置 + 打开的标签页 + 语言
@@ -1242,13 +1243,13 @@ LearnLab 核心不提供账号、服务器、云端数据库或“云同步”�
 | 数据                             | 格式/位置                                 | 事实来源              |
 | :------------------------------- | :---------------------------------------- | :-------------------- |
 | 全局设置、插件设置               | `~/.learnlab/config.json`                 | JSON 文件             |
-| 学习区包清单、软连接、顺序       | `<workspace>/.learnlab/workspace.db`      | 学习区数据库          |
-| 包内实验索引、阅读进度、实验摘要 | `<package>/.learnlab/package.db`          | 实验包数据库          |
-| 实验运行细节、报错、输出、产物   | `<package>/.learnlab/experiment_history/` | 历史文件              |
-| 临时环境和编译缓存               | `<package>/.learnlab/tmp/`                | 可清理缓存            |
-| 笔记正文                         | `notesDir/` 下 `.md`                      | Markdown 文件         |
-| 笔记检索索引                     | 可从 Markdown 重建                        | SQLite 或后续索引实现 |
-| 学习区全文搜索索引               | `<workspace>/.learnlab/tmp/search-index/` | 可删除、可重建的缓存  |
+| 学习区包清单、软连接、依赖状态   | `<workspace>/workspace.db`                | 当前逻辑数据库文件    |
+| 包内章节、阅读进度、实验摘要     | `<package>/package.db`                    | 当前逻辑数据库文件    |
+| 实验尝试详情                     | `<package>/experiment_history/`           | 当前历史模块的 JSON 文件 |
+| 临时环境和编译缓存               | 路径待定                                 | 后续可清理缓存        |
+| 笔记正文                         | `notesDir/` 下 `.md`                      | 规划中的 Markdown 文件 |
+| 笔记检索索引                     | 格式与位置待定                           | 尚未实现              |
+| 学习区全文搜索索引               | 格式与位置待定                           | 尚未实现；当前为遍历搜索 |
 
 ### 默认目录
 
@@ -1257,11 +1258,11 @@ LearnLab 核心不提供账号、服务器、云端数据库或“云同步”�
 ├── config.json
 ├── workspaces/
 │   ├── Java/
-│   │   ├── .learnlab/workspace.db
+│   │   ├── workspace.db
 │   │   ├── dependencies/
 │   │   │   └── python/<fingerprint>/
-│   │   ├── java-intro/.learnlab/package.db
-│   │   └── java-intro/.learnlab/experiment_history/
+│   │   ├── java-intro/package.db
+│   │   └── java-intro/experiment_history/
 │   └── 大学课程/
 ├── notes/
 └── plugins/
@@ -1285,22 +1286,22 @@ LearnLab 采用 **pnpm workspace + Electron + TypeScript + Preact**。源码仓�
 ```text
 源码仓库 learnlab/
 ├── apps/desktop/       # Electron 宿主，TypeScript/TSX
-├── packages/           # core-types、core、plugin-sdk 等可复用 TypeScript 包
+├── packages/           # core-types、core、markdown；plugin-sdk 当前为空占位
 ├── plugins/            # 官方插件；桥接层优先 TypeScript，runtime 语言不限
-├── tools/labkit/       # 实验包校验/预览/打包 CLI，TypeScript
+├── tools/labkit/       # 校验/预览内部模块；CLI 与打包后续实现
 ├── examples/packages/  # 开发用样例实验包
 ├── tests/              # 跨包行为测试
 └── docs/               # 设计文档
 
 用户学习区/
-├── .learnlab/workspace.db
+├── workspace.db
 ├── dependencies/       # 当前学习区共享依赖
 └── 各个实验包/         # Markdown、资源和任意语言的实验代码
 ```
 
 目录职责和语言规则如下：
 
-- 宿主应用、核心协议、SDK 和 LabKit 是 TypeScript 主线；
+- 宿主应用、核心协议和 LabKit 内部模块使用 TypeScript；SDK 尚未开放；
 - 官方插件的 `src/` 是桥接层，MVP 优先 TypeScript；
 - 插件的 `runtime/` 是可选外部环境进程，可以使用 Python、Rust、C/C++、Java 等；
 - 实验包不是 TypeScript 工程，正文使用 Markdown，实验代码由具体环境插件决定；
@@ -1309,26 +1310,20 @@ LearnLab 采用 **pnpm workspace + Electron + TypeScript + Preact**。源码仓�
 
 ## 🛠️ 技术栈（本地版）
 
-> 2026-09-01 更新：前端框架确认为 Preact，存储策略确认为 JSON（设置）+ SQLite（其余）。
+> 2026-10-01 同步：本表区分已用技术与后续候选，不把旧方案中的依赖当作已安装。
 
-| 层                  | 决策状态      | 方案                                                                                          |
-| :------------------ | :------------ | :-------------------------------------------------------------------------------------------- |
-| **桌面壳**          | ✅ 已定       | Electron（跨平台，VS Code 同款）                                                              |
-| **主线语言**        | ✅ 已定       | TypeScript                                                                                    |
-| **高性能内核**      | ✅ 已定       | LearnLab 不内置环境内核；具体环境由插件通过独立 CLI/进程接入，Rust/C++ 只在插件确有需要时使用 |
-| **前端框架**        | ✅ 已定       | **Preact + TypeScript**（3KB，API 与 React 一致，electron-vite 原生支持 JSX）                 |
-| **终端**            | ✅ 已定       | xterm.js + node-pty（通过插件提供）                                                           |
-| **Markdown 渲染**   | ✅ 已定       | markdown-it + admonition                                                                      |
-| **Markdown 编辑器** | ✅ 已定       | CodeMirror 6（LabKit 用，轻量库）                                                             |
-| **构建打包**        | ✅ 已定       | electron-vite + electron-builder                                                              |
-| **存储**            | ✅ 已定       | JSON（设置/配置）+ SQLite（进度/会话/笔记索引，better-sqlite3）                               |
-| **包格式**          | ✅ 已定       | `.labpkg`（ZIP），也支持目录导入                                                              |
-| **仓库结构**        | ✅ 已定       | monorepo（内核+插件+LabKit 同仓，pnpm workspace）                                             |
-| **界面 i18n**       | ✅ 已定       | MVP 不做，留好 i18n 结构，先中文                                                              |
-| **自动更新**        | ✅ 已定       | 不上                                                                                          |
-| **插件加载机制**    | ✅ 方向已定   | 独立插件宿主进程 + 白名单 API；具体消息格式随示例插件收敛                                     |
-| **插件 API 清单**   | ⏳ MVP 后稳定 | 先实现 MySQL/终端两个示例插件，再发布最小 SDK                                                 |
-| **数据库 schema**   | ⏳ MVP 前冻结 | 学习区 `workspace.db` + 实验包 `package.db`，其他数据库暂不增加                               |
+| 层 | 当前状态 | 方案 |
+| --- | --- | --- |
+| 桌面壳与主线语言 | 已实现 | Electron + TypeScript + electron-vite |
+| 前端框架 | 已实现 | Preact + TypeScript |
+| Markdown 阅读 | 已实现 | unified、remark-parse、remark-gfm、remark-rehype、rehype-sanitize |
+| 存储 | 已实现 | 配置 JSON；`workspace.db`/`package.db` 新建持久文件默认便携 JSON driver，已有 SQLite 文件需兼容运行时 |
+| 仓库结构 | 已实现 | pnpm workspace monorepo |
+| 包格式 | 部分实现 | 当前只加载目录；`.labpkg` 归档格式和导入待实现 |
+| 插件 | 纯逻辑已实现 | manifest/依赖解析与权限求交；独立宿主、运行时授权和稳定 SDK 未实现 |
+| 终端与 Markdown 编辑器 | 候选 | xterm.js/node-pty、CodeMirror 6 尚未加入依赖或接线 |
+| 桌面打包 | 未实现 | 当前只有 electron-vite 开发构建；安装包工具待选择 |
+| 自动更新与完整国际化 | 推迟 | 首个真实实验闭环不依赖这些能力 |
 
 ---
 
@@ -1341,4 +1336,4 @@ LearnLab 采用 **pnpm workspace + Electron + TypeScript + Preact**。源码仓�
 - **插件与实验包分离**：运行时相互解耦；源码可以在同一 monorepo，发布和版本独立
 - **插件作用域有限**：默认仅能访问 LearnLab API、插件自身目录和当前实验包目录
 - **核心不提供云同步**：只提供配置 JSON 导入/导出；云服务接入由第三方插件自行实现
-- **插件优先**：内核不原生支持任何实验环境；MySQL、Python 及其他专业环境全部通过插件提供，SQLite 仅用于 LearnLab 自身数据
+- **插件优先**：内核不原生支持任何实验环境；MySQL、Python 及其他专业环境计划由插件提供；当前 `.db` 默认便携格式只存 LearnLab 自身数据
