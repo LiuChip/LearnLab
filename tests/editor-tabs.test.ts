@@ -4,6 +4,7 @@ import {
 	closeEditorTab,
 	createEditorTabsState,
 	createChapterTabId,
+	createExperimentTabId,
 	openEditorTab,
 	type EditorTab
 } from '../apps/desktop/src/renderer/stores/tabStore';
@@ -39,5 +40,15 @@ describe('editor tabs state', () => {
 		const opened = openEditorTab(createEditorTabsState(), chapterOne);
 
 		expect(closeEditorTab(opened, chapterOne.id)).toEqual({ tabs: [], activeTabId: null });
+	});
+
+	it('keys experiment tabs by package and experiment and focuses duplicates', () => {
+		expect(createExperimentTabId('package-a', 'lab')).not.toBe(createExperimentTabId('package-b', 'lab'));
+		expect(createExperimentTabId('package-a', 'lab')).not.toBe(createChapterTabId('package-a', 'lab'));
+		const lab: EditorTab = { id: createExperimentTabId('package-a', 'lab'), title: '实验', kind: 'experiment', packageId: 'package-a', chapterId: 'one', experimentId: 'lab', experiment: { id: 'lab', title: '实验', type: 'manual', instruction: '', hints: [], line: 1 } };
+		const opened = openEditorTab(openEditorTab(openEditorTab(createEditorTabsState(), chapterOne), lab), chapterTwo);
+		const again = openEditorTab(opened, lab);
+		expect(again.tabs).toHaveLength(3);
+		expect(again.activeTabId).toBe(lab.id);
 	});
 });

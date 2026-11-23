@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef } from 'preact/hooks';
 import type { WorkbenchAction, WorkbenchState } from '../model/workbench';
 import { experiments, findChapter, chapters } from '../model/workbench';
+import { ExperimentCard } from './ExperimentCard';
 
 type Props = { state: WorkbenchState; dispatch: (action: WorkbenchAction) => void };
 
@@ -193,6 +194,14 @@ function ChapterContent({ state, dispatch }: Props) {
           </a>
         ))}
       </nav>
+      {currentExperiments.map((experiment) => (
+        <ExperimentCard
+          key={experiment.id}
+          experiment={experiment}
+          description={tasks[experiment.id] ?? ''}
+          dispatch={dispatch}
+        />
+      ))}
       {content.sections.map((section, index) => (
         <section class="markdown-section" id={`section-${index}`} key={index}>
           <h2 data-search-line={3 + index * 2}>{section.title}</h2>
@@ -206,25 +215,6 @@ function ChapterContent({ state, dispatch }: Props) {
           )}
         </section>
       ))}
-      {currentExperiments.length > 0 && (
-        <section class="chapter-experiments">
-          <h2>本节实验</h2>
-          {currentExperiments.map((experiment) => (
-            <div class="experiment-link" key={experiment.id}>
-              <div>
-                <strong>{experiment.title}</strong>
-                <small>{experiment.duration} · SQL Runner</small>
-              </div>
-              <button
-                class="primary-button"
-                onClick={() => dispatch({ type: 'openExperiment', experimentId: experiment.id })}
-              >
-                打开实验
-              </button>
-            </div>
-          ))}
-        </section>
-      )}
       <footer class="reader-footer">
         {content.eyebrow}
         <span>SQL 基础</span>

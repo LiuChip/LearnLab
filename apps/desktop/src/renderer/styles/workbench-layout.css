@@ -1057,3 +1057,111 @@
   .workbench-command-bar { grid-template-columns: 1fr; }
   .reader-markdown-content { width: 100%; }
 }
+
+.workbench-section-title {
+  color: inherit;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.workbench-section-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.workbench-mask-icon {
+  width: 16px;
+  height: 16px;
+  display: block;
+  background: currentColor;
+  mask-position: center;
+  mask-repeat: no-repeat;
+  mask-size: contain;
+  -webkit-mask-position: center;
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-size: contain;
+}
+
+.workbench-empty-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding-bottom: 12px;
+}
+
+.workbench-text-button {
+  margin: 0 12px;
+  padding: 4px 10px;
+  color: var(--workbench-accent);
+  border: 1px solid var(--workbench-strong-border);
+  border-radius: 3px;
+  font-size: 12px;
+}
+
+.workbench-text-button:hover:not(:disabled),
+.workbench-text-button:focus-visible {
+  background: var(--workbench-selection);
+  outline: none;
+}
+
+.workbench-text-button:disabled {
+  opacity: 0.5;
+}
+
+.workbench-search-scopes {
+  display: flex;
+  gap: 4px;
+  padding: 6px 8px 4px;
+}
+
+.workbench-scope {
+  padding: 2px 8px;
+  color: var(--workbench-muted);
+  border: 1px solid var(--workbench-strong-border);
+  border-radius: 3px;
+  font-size: 11px;
+}
+
+.workbench-scope.is-active {
+  color: var(--workbench-font);
+  background: var(--workbench-active);
+}
+
+.workbench-scope:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.workbench-find-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.workbench-find-buttons {
+  display: flex;
+  gap: 6px;
+  padding: 0 8px 8px;
+}
+
+.workbench-find-buttons .workbench-text-button {
+  margin: 0;
+}
+
+.workbench-search-summary.is-error {
+  color: var(--workbench-red);
+}
+
+.workbench-activity-footer {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+}
+
+.workbench-activity-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

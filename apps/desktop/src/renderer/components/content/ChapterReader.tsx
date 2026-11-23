@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'preact/hooks';
-import type { MarkdownResult } from '@learnlab/markdown';
+import { findInText, type FindOptions, type MarkdownResult } from '@learnlab/markdown';
 import type { ChapterEntry } from '@learnlab/core-types';
 import type { ChapterNavigationItem, PluginReadonlyStatus } from '../../utils/navigation';
 import type { ReadingError } from '../../stores/readingStore';
@@ -18,6 +18,10 @@ interface ChapterReaderProps {
   onToggleCompleted: (completed: boolean) => void;
   onCopyCode: (code: string, codeId: string) => void;
   onScrollChange: (scrollTop: number, scrollHeight: number, clientHeight: number) => void;
+  findQuery: string;
+  findOptions: { caseSensitive: boolean; wholeWord: boolean; isRegex: boolean };
+  findIndex: number;
+  onFindTotal: (total: number) => void;
 }
 
 export function ChapterReader({
@@ -33,7 +37,11 @@ export function ChapterReader({
   onNavigateChapter,
   onToggleCompleted,
   onCopyCode,
-  onScrollChange
+  onScrollChange,
+  findQuery,
+  findOptions,
+  findIndex,
+  onFindTotal
 }: ChapterReaderProps) {
   const contentRef = useRef<HTMLDivElement>(null);
   const articleRef = useRef<HTMLElement>(null);
@@ -106,6 +114,73 @@ export function ChapterReader({
       }
     });
   }, [documentKey, markdown?.html, isLoading, copyStatus, onCopyCode]);
+
+  // Current-file find: wrap matches in <mark>, one text node at a time, so the
+  // sanitized chapter HTML is never re-parsed. Marks are rebuilt from scratch.
+  useEffect(() => {
+    const root = contentRef.current;
+    if (!root) {
+      onFindTotal(0);
+      return;
+    }
+    root.querySelectorAll('mark.find-match').forEach((mark) => {
+      const parent = mark.parentNode;
+      if (!parent) return;
+      parent.replaceChild(document.createTextNode(mark.textContent ?? ''), mark);
+      parent.normalize();
+    });
+    if (!findQuery.trim()) {
+      onFindTotal(0);
+      return;
+    }
+    const options: FindOptions = {
+      query: findQuery,
+      caseSensitive: findOptions.caseSensitive,
+      wholeWord: findOptions.wholeWord,
+      isRegex: findOptions.isRegex
+    };
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    const nodes: Text[] = [];
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      const parent = node.parentElement;
+      if (!parent || parent.closest('.code-block-header')) continue;
+      nodes.push(node as Text);
+    }
+    const perNode = nodes.map((node) => findInText(node.data, options).ranges);
+    let counter = 0;
+    const bases = perNode.map((ranges) => {
+      const base = counter;
+      counter += ranges.length;
+      return base;
+    });
+    nodes.forEach((node, n) => {
+      const ranges = perNode[n];
+      for (let i = ranges.length - 1; i >= 0; i -= 1) {
+        const range = ranges[i];
+        const target = node.splitText(range.start);
+        target.splitText(range.end - range.start);
+        const mark = document.createElement('mark');
+        mark.className = 'find-match';
+        mark.dataset.findIndex = String(bases[n] + i);
+        target.parentNode?.replaceChild(mark, target);
+        mark.appendChild(target);
+      }
+    });
+    onFindTotal(counter);
+  }, [markdown?.html, isLoading, findQuery, findOptions.caseSensitive, findOptions.wholeWord, findOptions.isRegex, onFindTotal]);
+
+  // Move the active highlight and bring it into view without rebuilding marks.
+  useEffect(() => {
+    const root = contentRef.current;
+    if (!root) return;
+    let activeMark: Element | null = null;
+    root.querySelectorAll('mark.find-match').forEach((mark) => {
+      const active = (mark as HTMLElement).dataset.findIndex === String(findIndex);
+      mark.classList.toggle('find-match-active', active);
+      if (active && !activeMark) activeMark = mark;
+    });
+    (activeMark as Element | null)?.scrollIntoView({ block: 'center' });
+  }, [findIndex, markdown?.html]);
 
   const handleScroll = (event: Event) => {
     if (isProgrammaticScrollRef.current) {

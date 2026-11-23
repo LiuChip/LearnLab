@@ -26,7 +26,6 @@ import type {
 type ReadChapterPayload = { content: string; contentHash: string };
 
 export interface LearnLabAPI {
-  getExamplePackageDir: () => Promise<string>;
   loadPackage: (packageDir: string) => Promise<Result<LoadedPackage, LoadError>>;
   readChapter: (packageDir: string, chapterFile: string) => Promise<Result<ReadChapterPayload, LoadError>>;
   package: {
@@ -38,6 +37,11 @@ export interface LearnLabAPI {
     getDefaultDir: () => Promise<string>;
     init: (workspaceDir: string) => Promise<WorkspacePaths>;
     registerPackage: (workspaceDir: string, packageDir: string) => Promise<RegisterPackageResult>;
+    importPackage: (
+      workspaceDir: string
+    ) => Promise<{ canceled: true } | { canceled: false; result: RegisterPackageResult }>;
+    isExampleAvailable: () => Promise<boolean>;
+    importExample: (workspaceDir: string) => Promise<RegisterPackageResult>;
     unregisterPackage: (workspaceDir: string, packageId: string) => Promise<boolean>;
     listPackages: (workspaceDir: string) => Promise<RegisteredPackage[]>;
     getPackage: (workspaceDir: string, packageId: string) => Promise<RegisteredPackage | undefined>;
@@ -48,6 +52,8 @@ export interface LearnLabAPI {
     getAllProgress: (packageDir: string) => Promise<ReadingProgressRecord[]>;
     recordExperimentAttempt: (packageDir: string, attempt: ExperimentAttemptDetail) => Promise<string>;
     getExperimentAttempts: (packageDir: string, labId: string) => Promise<ExperimentAttemptDetail[]>;
+    getWorkspaceSetting: (workspaceDir: string, key: string) => Promise<string | null>;
+    setWorkspaceSetting: (workspaceDir: string, key: string, value: string) => Promise<void>;
   };
   config: {
     read: () => Promise<Result<AppConfig, ConfigStoreError>>;

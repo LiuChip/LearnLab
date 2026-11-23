@@ -97,26 +97,14 @@ loadWorkbenchCatalog(loaders): Promise<WorkbenchCatalog>
 边界保留已成功的数据，并在 `WorkbenchCatalog.errors` 中按来源返回错误。目录
 读取失败不得阻止学习区或章节正文加载。
 
-`stores/readingStore.ts` 还导出内部判断函数
-`shouldPreserveWorkspaceSearch(workspaceDir: string | null): boolean`。其 hook 返回的
-搜索入口为：
-
-```ts
-runSearch(
-  query: string,
-  options?: Partial<SearchOptions>,
-  workspaceDir?: string | null
-): Promise<void>
-```
-
-搜索输入由 `components/navigation/SearchReplaceView.tsx` 以约 250ms 防抖驱动：非空
-查询调用 `runSearch`，空查询清除当前结果；大小写、全字和正则选项变化会使当前请求
-失效并重新搜索。顶部刷新按钮仍调用同一个入口，以便文件被外部修改后强制重扫。
-`stores/searchInput.ts` 的 `getSearchInputEffect` 和 `scheduleLiveSearch` 是 renderer
-内部辅助函数，不是插件或第三方 SDK API。
-
-传入 `workspaceDir` 时调用学习区搜索，切换实验包后保留已有结果；不传时调用当前
-实验包搜索，加载其他包会清除结果。这是当前 renderer 行为，不是公共搜索 SDK。
+`stores/readingStore.ts` 的 hook 提供当前文件查找状态：`searchQuery`、
+`searchOptions`、`findIndex`、`findTotal`，以及 `setSearchQuery`、
+`toggleSearchOption`、`stepFind(direction)`、`reportFindTotal(total)`。查找不经过
+IPC：`ChapterReader` 在已渲染章节的文本节点上调用 `@learnlab/markdown` 的
+`findInText` 并用 `<mark>` 高亮，把匹配总数回报给 store；`stepMatchIndex` 负责
+上一个/下一个的循环。章节切换、查找词或选项变化会重置当前序号，空查询清空结果，
+非法或过长的正则返回可读错误而不抛出。当前只开放“当前文件”范围；“当前实验包”
+“当前学习区”显示为禁用项。这些是 renderer 内部行为，不是公共搜索 SDK。
 
 ## 1. Desktop renderer bridge
 
@@ -127,7 +115,6 @@ runSearch(
 ### 根方法
 
 ```ts
-window.learnlab.getExamplePackageDir(): Promise<string>
 window.learnlab.loadPackage(packageDir: string): Promise<Result<LoadedPackage, LoadError>>
 window.learnlab.readChapter(
   packageDir: string,
@@ -149,6 +136,11 @@ listChapters(packageDir: string): Promise<ChapterNavigationItem[]>
 getDefaultDir(): Promise<string>
 init(workspaceDir: string): Promise<WorkspacePaths>
 registerPackage(workspaceDir: string, packageDir: string): Promise<RegisterPackageResult>
+// 仅接受学习区内的真实目录；区外目录返回 outside_workspace，软连接返回 symlink_not_allowed
+importPackage(workspaceDir: string): Promise<{ canceled: true } | { canceled: false; result: RegisterPackageResult }>
+// 由主进程弹出系统目录选择框，复制到学习区后登记；renderer 不能传入来源路径
+isExampleAvailable(): Promise<boolean>
+importExample(workspaceDir: string): Promise<RegisterPackageResult> // 仅开发构建可用
 unregisterPackage(workspaceDir: string, packageId: string): Promise<boolean>
 listPackages(workspaceDir: string): Promise<RegisteredPackage[]>
 getPackage(workspaceDir: string, packageId: string): Promise<RegisteredPackage | undefined>
@@ -162,6 +154,8 @@ saveReadingProgress(packageDir: string, chapterId: string, contentHash: string, 
 getAllProgress(packageDir: string): Promise<ReadingProgressRecord[]>
 recordExperimentAttempt(packageDir: string, attempt: ExperimentAttemptDetail): Promise<string>
 getExperimentAttempts(packageDir: string, labId: string): Promise<ExperimentAttemptDetail[]>
+getWorkspaceSetting(workspaceDir: string, key: string): Promise<string | null>
+setWorkspaceSetting(workspaceDir: string, key: string, value: string): Promise<void>
 ```
 
 ### `config`
@@ -202,9 +196,9 @@ channel 名称。每个 handler 会验证 renderer、主 frame，并按 `WebCont
 
 | 领域       | channels                                                                                                                                                                 |
 | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| package    | `package:example-dir`, `package:load`, `package:read-chapter`, `package:search`, `package:search-workspace`, `package:list-chapters`                                     |
-| workspace  | `workspace:default-dir`, `workspace:init`, `workspace:register-package`, `workspace:unregister-package`, `workspace:list-packages`, `workspace:get-package`              |
-| database   | `database:get-reading-progress`, `database:save-reading-progress`, `database:get-all-progress`, `database:record-experiment-attempt`, `database:get-experiment-attempts` |
+| package    | `package:load`, `package:read-chapter`, `package:search`, `package:search-workspace`, `package:list-chapters`                                     |
+| workspace  | `workspace:default-dir`, `workspace:init`, `workspace:register-package`, `workspace:import-package`, `workspace:example-available`, `workspace:import-example`, `workspace:unregister-package`, `workspace:list-packages`, `workspace:get-package`              |
+| database   | `database:get-reading-progress`, `database:save-reading-progress`, `database:get-all-progress`, `database:record-experiment-attempt`, `database:get-experiment-attempts`, `database:get-workspace-setting`, `database:set-workspace-setting` |
 | config     | `config:read`, `config:write`, `config:export-json`, `config:import-json`, `config:backup-instructions`                                                                  |
 | dependency | `dependency:import-bundled`, `dependency:list`, `dependency:prerequisites`                                                                                               |
 | plugin     | `plugin:list`, `plugin:resolve-for-package`                                                                                                                              |
@@ -351,7 +345,7 @@ SQLite 文件只在运行时支持 `node:sqlite` 时打开，否则抛出
 
 ## 7. 文件格式接口
 
-- 实验包 `manifest.yaml`：必填 `id`、`version`、`name`、`author`、`chapters`；
+- 实验包 `manifest.yaml`：当前必填 `id`、`version`、`name`、`author`、`chapters`；未来设计中的可选 `icon` 为包内资源的相对路径，推荐 `assets/package-icon.svg`。当前 `PackageManifest` 和 `RegisteredPackage` 无该字段，validator 会忽略输入中的 `icon`；即使写入 manifest 也不会显示作者图标。未来目标是校验资源并安全加载；无效图标回退默认包装盒并保留诊断原因。
   章节必填 `id`、`title`、`file`。
 - 插件 `manifest.yaml`：必填 `plugin_id`、`version`；其余字段见第 3 节。
 - 学习区：`workspace.db`、`dependencies/`、已登记实验包目录。
@@ -384,5 +378,6 @@ capability ID、授权弹窗/撤销/持久化、运行时 context 注入、`regi
 
 | 日期       | 变更                                                                                                                                         |
 | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2026-11-23 | 新增 `database.getWorkspaceSetting`/`setWorkspaceSetting`（`workspace_settings` 读写，用于最小阅读会话恢复）；`ExperimentHistory` 组件完成实验历史读取 UI（筛选/展开/损坏记录处理）；`ExperimentView` 增加"实验说明/执行历史"标签页；`database` IPC 新增两个 channel。 |
 | 2026-09-15 | 登记正式 renderer 的 Workbench、通知计时、目录聚合和学习区搜索内部接口；记录新持久数据库默认便携格式及已有 SQLite 的兼容行为。               |
 | 2026-09-15 | 首次全仓扫描；登记 renderer bridge、内部 IPC、workspace 包导出、manifest/存储格式和未开放能力；修正 preload 配置 API 的 `unknown` 类型漂移。 |

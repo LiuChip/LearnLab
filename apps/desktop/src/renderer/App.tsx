@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'preact/hooks';
-import type { SearchMatch } from '@learnlab/core';
 import type {
   RegisteredPackage
 } from '@learnlab/core-types';
 import { ChapterReader } from './components/content/ChapterReader';
 import { ChapterTree } from './components/navigation/ChapterTree';
 import { DependencyList } from './components/navigation/DependencyList';
+import { ExperimentView } from './components/content/ExperimentView';
 import { ExperimentList } from './components/navigation/ExperimentList';
 import { FileExplorer } from './components/navigation/FileExplorer';
 import { PluginList } from './components/navigation/PluginList';
@@ -20,6 +20,7 @@ import {
   closeEditorTab,
   createChapterTabId,
   createEditorTabsState,
+  createExperimentTabId,
   openEditorTab,
   type EditorTab,
   type EditorTabsState
@@ -37,6 +38,7 @@ import {
   type NotificationInput,
   type WorkbenchState
 } from './stores/workbenchStore';
+import type { ExperimentMarker } from '@learnlab/markdown';
 import type { WorkbenchActivityId } from './utils/workbench';
 import './styles/base.css';
 import './styles/theme.css';
@@ -66,6 +68,8 @@ export function App() {
   const [primaryWidth, setPrimaryWidth] = useState(270);
   const [auxiliaryWidth, setAuxiliaryWidth] = useState(280);
   const [bottomPanelHeight, setBottomPanelHeight] = useState(210);
+  const [importing, setImporting] = useState(false);
+  const [exampleAvailable, setExampleAvailable] = useState(false);
   const [quickOpenVisible, setQuickOpenVisible] = useState(false);
   const [quickQuery, setQuickQuery] = useState('');
   const quickInputRef = useRef<HTMLInputElement>(null);
@@ -90,9 +94,22 @@ export function App() {
 
         setWorkspaceDir(defaultDir);
         setWorkspacePackages(packages);
+        void window.learnlab.workspace.isExampleAvailable()
+          .then((available) => { if (!cancelled) setExampleAvailable(available); })
+          .catch(() => undefined);
 
-        const initialPackage = packages[0];
-        if (!initialPackage) {
+        // Restore last session: prefer the package the user had open last time.
+        const [lastPackageId, lastChapterId] = await Promise.all([
+          window.learnlab.database.getWorkspaceSetting(defaultDir, 'last_package_id').catch(() => null),
+          window.learnlab.database.getWorkspaceSetting(defaultDir, 'last_chapter_id').catch(() => null)
+        ]);
+        if (cancelled) return;
+
+        const restoredPackage = lastPackageId
+          ? (packages.find((p) => p.id === lastPackageId) ?? packages[0])
+          : packages[0];
+
+        if (!restoredPackage) {
           setSelectedPackageId('');
           setEditorTabs(createEditorTabsState());
           store.clearView();
@@ -104,8 +121,8 @@ export function App() {
           return;
         }
 
-        setSelectedPackageId(initialPackage.id);
-        await store.loadPackageByPath(initialPackage.path);
+        setSelectedPackageId(restoredPackage.id);
+        await store.loadPackageByPath(restoredPackage.path, lastChapterId ?? undefined);
       } catch (cause) {
         if (cancelled) return;
         const message = cause instanceof Error ? cause.message : String(cause);
@@ -184,33 +201,41 @@ export function App() {
     };
     setEditorTabs((state) => openEditorTab(state, tab));
     void store.selectChapter(chapter.id);
-  }, [store.chapters, store.selectChapter, selectedPackageId]);
+    // Persist last-visited chapter so it can be restored on next launch.
+    if (workspaceDir) {
+      void window.learnlab.database.setWorkspaceSetting(workspaceDir, 'last_chapter_id', chapterId).catch(() => undefined);
+    }
+  }, [store.chapters, store.selectChapter, selectedPackageId, workspaceDir]);
+
+  const openExperimentTab = useCallback((experiment: ExperimentMarker) => {
+    if (!selectedPackageId || !store.activeChapterId) return;
+    setEditorTabs((state) => openEditorTab(state, {
+      id: createExperimentTabId(selectedPackageId, experiment.id),
+      title: experiment.title,
+      kind: 'experiment',
+      packageId: selectedPackageId,
+      chapterId: store.activeChapterId as string,
+      experimentId: experiment.id,
+      experiment
+    }));
+  }, [selectedPackageId, store.activeChapterId]);
 
   const switchPackage = useCallback(async (item: RegisteredPackage, preferredChapterId?: string) => {
     if (item.id === selectedPackageId && !preferredChapterId) return;
     setSelectedPackageId(item.id);
     setEditorTabs(createEditorTabsState());
     await store.loadPackageByPath(item.path, preferredChapterId);
-  }, [selectedPackageId, store.loadPackageByPath]);
-
-  const selectSearchMatch = useCallback(async (match: SearchMatch) => {
-    const item = workspacePackages.find((candidate) => candidate.id === match.packageId);
-    if (!item) {
-      notify({ level: 'warning', title: '无法打开搜索结果', message: '该实验包已不在当前学习区。' });
-      return;
+    // Persist last-opened package so it can be restored on next launch.
+    if (workspaceDir) {
+      void window.learnlab.database.setWorkspaceSetting(workspaceDir, 'last_package_id', item.id).catch(() => undefined);
     }
-    if (item.id !== selectedPackageId) {
-      await switchPackage(item, match.chapterId);
-    } else {
-      openChapterTab(match.chapterId);
-    }
-  }, [workspacePackages, selectedPackageId, switchPackage, openChapterTab, notify]);
+  }, [selectedPackageId, store.loadPackageByPath, workspaceDir]);
 
   const activateTab = useCallback((tabId: string) => {
     const tab = editorTabs.tabs.find((item) => item.id === tabId);
     if (!tab) return;
     setEditorTabs((state) => activateEditorTab(state, tabId));
-    if (tab.packageId === selectedPackageId) void store.selectChapter(tab.chapterId);
+    if (tab.kind === 'chapter' && tab.packageId === selectedPackageId) void store.selectChapter(tab.chapterId);
   }, [editorTabs.tabs, selectedPackageId, store.selectChapter]);
 
   const closeTab = useCallback((tabId: string) => {
@@ -219,16 +244,75 @@ export function App() {
     setEditorTabs(nextState);
     if (!closingActiveTab) return;
     const nextTab = nextState.tabs.find((item) => item.id === nextState.activeTabId);
-    if (nextTab?.packageId === selectedPackageId) void store.selectChapter(nextTab.chapterId);
+    if (nextTab?.kind === 'chapter' && nextTab.packageId === selectedPackageId) void store.selectChapter(nextTab.chapterId);
   }, [editorTabs, selectedPackageId, store.selectChapter]);
 
   const jumpToHeading = useCallback((headingId: string) => {
     document.getElementById(headingId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }, []);
 
-  const searchCurrentWorkspace = useCallback((query: string) => {
-    if (query.trim()) void store.runSearch(query, undefined, workspaceDir);
-  }, [store.runSearch, workspaceDir]);
+  const describeImportError = useCallback((error: { type: string; message: string }) => {
+    switch (error.type) {
+      case 'manifest_invalid':
+        return `实验包的 manifest 或章节无效：${error.message}`;
+      case 'package_already_registered':
+        return '学习区里已经有同一个实验包，没有重复导入。';
+      case 'name_conflict':
+        return `学习区里已有同名的另一个实验包：${error.message}`;
+      case 'outside_workspace':
+        return '实验包目录必须位于学习区内，请通过“导入实验包”复制进来。';
+      case 'symlink_not_allowed':
+        return '不支持软连接形式的实验包，请选择真实目录。';
+      case 'package_not_found':
+        return `找不到可读取的实验包目录：${error.message}`;
+      default:
+        return error.message;
+    }
+  }, []);
+
+  const finishImport = useCallback(async (dir: string, registered: RegisteredPackage) => {
+    const packages = await window.learnlab.workspace.listPackages(dir);
+    setWorkspacePackages(packages);
+    setSelectedPackageId(registered.id);
+    setEditorTabs(createEditorTabsState());
+    await store.loadPackageByPath(registered.path);
+    notify({ level: 'info', title: '实验包已导入', message: `${registered.name} 已复制到学习区并登记。` });
+  }, [store.loadPackageByPath, notify]);
+
+  const importPackage = useCallback(async () => {
+    if (!workspaceDir || importing) return;
+    setImporting(true);
+    try {
+      const outcome = await window.learnlab.workspace.importPackage(workspaceDir);
+      if (outcome.canceled) return;
+      if (!outcome.result.ok) {
+        notify({ level: 'error', title: '导入实验包失败', message: describeImportError(outcome.result.error) });
+        return;
+      }
+      await finishImport(workspaceDir, outcome.result.value);
+    } catch (cause) {
+      notify({ level: 'error', title: '导入实验包失败', message: cause instanceof Error ? cause.message : String(cause) });
+    } finally {
+      setImporting(false);
+    }
+  }, [workspaceDir, importing, notify, describeImportError, finishImport]);
+
+  const importExample = useCallback(async () => {
+    if (!workspaceDir || importing) return;
+    setImporting(true);
+    try {
+      const result = await window.learnlab.workspace.importExample(workspaceDir);
+      if (!result.ok) {
+        notify({ level: 'error', title: '导入示例包失败', message: describeImportError(result.error) });
+        return;
+      }
+      await finishImport(workspaceDir, result.value);
+    } catch (cause) {
+      notify({ level: 'error', title: '导入示例包失败', message: cause instanceof Error ? cause.message : String(cause) });
+    } finally {
+      setImporting(false);
+    }
+  }, [workspaceDir, importing, notify, describeImportError, finishImport]);
 
   let sidebar;
   switch (workbench.activeActivity) {
@@ -240,17 +324,17 @@ export function App() {
         <SearchReplaceView
           query={store.searchQuery}
           options={store.searchOptions}
-          results={store.searchResults}
-          searching={store.isSearching}
+          hasDocument={Boolean(editorTabs.activeTabId && store.markdown)}
+          findIndex={store.findIndex}
+          findTotal={store.findTotal}
           onQueryChange={store.setSearchQuery}
           onToggleOption={store.toggleSearchOption}
-          onSearch={searchCurrentWorkspace}
-          onSelectMatch={(match) => { void selectSearchMatch(match); }}
+          onStep={store.stepFind}
         />
       );
       break;
     case 'experiments':
-      sidebar = <ExperimentList chapter={store.activeChapter} readonlyStatus={store.readonlyStatus} />;
+      sidebar = <ExperimentList chapter={store.activeChapter} parsed={store.experiments} readonlyStatus={store.readonlyStatus} onOpenExperiment={openExperimentTab} />;
       break;
     case 'plugins':
       sidebar = <PluginList plugins={catalog.plugins} loadedCount={store.loadedPluginCount} loading={catalog.loading} error={catalog.errors.plugins} />;
@@ -259,14 +343,27 @@ export function App() {
       sidebar = <DependencyList dependencies={catalog.dependencies} prerequisites={catalog.prerequisites} loading={catalog.loading} dependencyError={catalog.errors.dependencies} prerequisiteError={catalog.errors.prerequisites} />;
       break;
     case 'workspace':
-      sidebar = <WorkspacePackageList packages={workspacePackages} selectedPackageId={selectedPackageId} onSelectPackage={(item) => { void switchPackage(item); }} />;
+      sidebar = (
+        <WorkspacePackageList
+          packages={workspacePackages}
+          selectedPackageId={selectedPackageId}
+          importing={importing}
+          exampleAvailable={exampleAvailable}
+          onSelectPackage={(item) => { void switchPackage(item); }}
+          onImportPackage={() => { void importPackage(); }}
+          onImportExample={() => { void importExample(); }}
+        />
+      );
       break;
     case 'explorer':
       sidebar = <FileExplorer packageName={store.packageName} chapters={store.chapters} activeChapterId={store.activeChapterId} onSelectChapter={openChapterTab} />;
       break;
   }
 
-  const editor = editorTabs.activeTabId ? (
+  const activeTab = editorTabs.tabs.find((tab) => tab.id === editorTabs.activeTabId);
+  const editor = activeTab?.kind === 'experiment' ? (
+    <ExperimentView experiment={activeTab.experiment} readonlyStatus={store.readonlyStatus} packageDir={store.packageDir || ''} />
+  ) : editorTabs.activeTabId ? (
     <ChapterReader
       documentKey={editorTabs.activeTabId}
       markdown={store.markdown}
@@ -281,6 +378,10 @@ export function App() {
       onToggleCompleted={store.toggleCompleted}
       onCopyCode={store.copyCodeToClipboard}
       onScrollChange={store.updateScroll}
+      findQuery={store.searchQuery}
+      findOptions={store.searchOptions}
+      findIndex={store.findIndex}
+      onFindTotal={store.reportFindTotal}
     />
   ) : (
     <div class="workbench-editor-empty">

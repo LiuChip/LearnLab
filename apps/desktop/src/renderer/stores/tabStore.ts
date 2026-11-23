@@ -1,10 +1,27 @@
-export interface EditorTab {
+import type { ExperimentMarker } from '@learnlab/markdown';
+
+interface EditorTabBase {
 	id: string;
 	title: string;
-	kind: 'chapter';
 	packageId: string;
+}
+
+export interface ChapterEditorTab extends EditorTabBase {
+	kind: 'chapter';
 	chapterId: string;
 }
+
+// An experiment tab is keyed by package + experiment, so the same experiment
+// focuses its existing tab and identical ids in different packages never collide.
+export interface ExperimentEditorTab extends EditorTabBase {
+	kind: 'experiment';
+	chapterId: string;
+	experimentId: string;
+	// Snapshot taken when the tab opens, so the tab survives chapter switches.
+	experiment: ExperimentMarker;
+}
+
+export type EditorTab = ChapterEditorTab | ExperimentEditorTab;
 
 export interface EditorTabsState {
 	tabs: EditorTab[];
@@ -17,6 +34,10 @@ export function createEditorTabsState(): EditorTabsState {
 
 export function createChapterTabId(packageId: string, chapterId: string): string {
 	return `chapter:${encodeURIComponent(packageId)}:${encodeURIComponent(chapterId)}`;
+}
+
+export function createExperimentTabId(packageId: string, experimentId: string): string {
+	return `experiment:${encodeURIComponent(packageId)}:${encodeURIComponent(experimentId)}`;
 }
 
 export function openEditorTab(state: EditorTabsState, tab: EditorTab): EditorTabsState {

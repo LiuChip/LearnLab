@@ -22,6 +22,8 @@ export interface PackageRegisterError {
     | 'package_already_registered'
     | 'name_conflict'
     | 'path_conflict'
+    | 'outside_workspace'
+    | 'symlink_not_allowed'
     | 'read_error';
   message: string;
   conflictPath?: string;

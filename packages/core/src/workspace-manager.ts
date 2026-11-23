@@ -144,7 +144,7 @@ export class WorkspaceManager {
       const db = WorkspaceDatabase.open(workspaceDir);
       try {
         const state = stateFromDatabase(db);
-        const result = await registerPackageInternal(state, packageDir);
+        const result = await registerPackageInternal(state, packageDir, workspaceDir);
         if (!result.ok) return result;
         const loaded = await loadPackage(result.value.path);
         if (!loaded.ok) return { ok: false, error: { type: 'manifest_invalid', message: loaded.error.message, details: loaded.error.details } };

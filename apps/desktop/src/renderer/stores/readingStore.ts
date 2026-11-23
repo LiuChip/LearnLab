@@ -1,5 +1,13 @@
 import { useState, useCallback, useRef } from 'preact/hooks';
-import { parseMarkdown, type MarkdownResult } from '@learnlab/markdown';
+import {
+  parseExperimentMarkers,
+  parseMarkdown,
+  stepMatchIndex,
+  type ExperimentParseResult,
+  type MarkdownResult
+} from '@learnlab/markdown';
+
+const NO_EXPERIMENTS: ExperimentParseResult = { experiments: [], errors: [] };
 import {
   calculateScrollProgress,
   evaluatePluginResolutionStatus,
@@ -8,7 +16,6 @@ import {
   type ChapterNavigationItem,
   type PluginReadonlyStatus
 } from '../utils/navigation';
-import type { SearchOptions, SearchResult } from '@learnlab/core';
 
 export interface ReadingError {
   type: string;
@@ -20,16 +27,13 @@ const EMPTY_PLUGIN_STATUS: PluginReadonlyStatus = {
   missingPlugins: []
 };
 
-export function shouldPreserveWorkspaceSearch(workspaceDir: string | null): boolean {
-  return workspaceDir !== null;
-}
-
 export function useReadingStore() {
   const [packageDir, setPackageDir] = useState<string | null>(null);
   const [packageName, setPackageName] = useState<string>('LearnLab');
   const [chapters, setChapters] = useState<ChapterNavigationItem[]>([]);
   const [activeChapterId, setActiveChapterId] = useState<string | null>(null);
   const [markdown, setMarkdown] = useState<MarkdownResult | null>(null);
+  const [experiments, setExperiments] = useState<ExperimentParseResult>(NO_EXPERIMENTS);
   const [contentHash, setContentHash] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<ReadingError | null>(null);
@@ -50,8 +54,10 @@ export function useReadingStore() {
     wholeWord: false,
     isRegex: false
   });
-  const [searchResults, setSearchResults] = useState<SearchResult | null>(null);
-  const [isSearching, setIsSearching] = useState<boolean>(false);
+  // Current-file find state: matches live in the rendered chapter, so the
+  // reader reports the total and the store only tracks the active index.
+  const [findIndex, setFindIndex] = useState(-1);
+  const [findTotal, setFindTotal] = useState(0);
 
   // Copy code feedback
   const [copyStatus, setCopyStatus] = useState<{
@@ -62,8 +68,6 @@ export function useReadingStore() {
 
   const activePackageDirRef = useRef<string | null>(null);
   const packageRequestRef = useRef(0);
-  const searchRequestRef = useRef(0);
-  const searchWorkspaceRef = useRef<string | null>(null);
 
   const refreshChapters = useCallback(async (pkgDir: string, requestId?: number) => {
     try {
@@ -92,12 +96,9 @@ export function useReadingStore() {
       setReadonlyStatus(EMPTY_PLUGIN_STATUS);
       setLoadedPluginCount(0);
       setCopyStatus(null);
-      if (!shouldPreserveWorkspaceSearch(searchWorkspaceRef.current)) {
-        searchRequestRef.current += 1;
-        searchWorkspaceRef.current = null;
-        setSearchResults(null);
-        setIsSearching(false);
-      }
+      setFindIndex(-1);
+      setFindTotal(0);
+      setExperiments(NO_EXPERIMENTS);
 
       try {
         const loaded = await window.learnlab.loadPackage(dir);
@@ -159,6 +160,7 @@ export function useReadingStore() {
         const parsed = await parseMarkdown(content);
         if (packageRequestRef.current !== requestId || activePackageDirRef.current !== dir) return;
         setMarkdown(parsed);
+        setExperiments(parseExperimentMarkers(content));
 
         // Refresh list to reflect any fingerprint reset
         const updatedList = await window.learnlab.package.listChapters(dir);
@@ -194,6 +196,9 @@ export function useReadingStore() {
       setActiveChapterId(chapterId);
       setMarkdown(null);
       setContentHash(null);
+      setFindIndex(-1);
+      setFindTotal(0);
+      setExperiments(NO_EXPERIMENTS);
 
       try {
         const readResult = await window.learnlab.readChapter(currentDir, target.file);
@@ -212,6 +217,7 @@ export function useReadingStore() {
         const parsed = await parseMarkdown(content);
         if (packageRequestRef.current !== requestId || activePackageDirRef.current !== currentDir) return;
         setMarkdown(parsed);
+        setExperiments(parseExperimentMarkers(content));
 
         await refreshChapters(currentDir, requestId);
       } catch (cause) {
@@ -231,8 +237,6 @@ export function useReadingStore() {
 
   const clearView = useCallback((nextError?: ReadingError) => {
     packageRequestRef.current += 1;
-    searchRequestRef.current += 1;
-    searchWorkspaceRef.current = null;
     activePackageDirRef.current = null;
     setPackageDir(null);
     setPackageName('LearnLab');
@@ -243,9 +247,10 @@ export function useReadingStore() {
     setReadonlyStatus(EMPTY_PLUGIN_STATUS);
     setLoadedPluginCount(0);
     setSearchQuery('');
-    setSearchResults(null);
-    setIsSearching(false);
     setCopyStatus(null);
+    setFindIndex(-1);
+    setFindTotal(0);
+    setExperiments(NO_EXPERIMENTS);
     setError(nextError ?? null);
     setIsLoading(false);
   }, []);
@@ -311,73 +316,31 @@ export function useReadingStore() {
     [activeChapterId, contentHash, activeChapter, refreshChapters]
   );
 
-  const runSearch = useCallback(
-    async (queryText: string, opts?: Partial<SearchOptions>, workspaceDir?: string | null) => {
-      const currentDir = activePackageDirRef.current;
-      if (!currentDir) return;
-      searchWorkspaceRef.current = workspaceDir ?? null;
-      const packageRequestId = packageRequestRef.current;
-      const searchRequestId = searchRequestRef.current + 1;
-      searchRequestRef.current = searchRequestId;
-
-      const mergedOpts: SearchOptions = {
-        query: queryText,
-        caseSensitive: opts?.caseSensitive ?? searchOptions.caseSensitive,
-        wholeWord: opts?.wholeWord ?? searchOptions.wholeWord,
-        isRegex: opts?.isRegex ?? searchOptions.isRegex
-      };
-
-      setIsSearching(true);
-      try {
-        const result = workspaceDir
-          ? await window.learnlab.package.searchWorkspace(workspaceDir, mergedOpts)
-          : await window.learnlab.package.search(currentDir, mergedOpts);
-        if (
-          packageRequestRef.current !== packageRequestId ||
-          activePackageDirRef.current !== currentDir ||
-          searchRequestRef.current !== searchRequestId
-        ) return;
-        setSearchResults(result);
-      } catch (err) {
-        if (
-          packageRequestRef.current !== packageRequestId ||
-          activePackageDirRef.current !== currentDir ||
-          searchRequestRef.current !== searchRequestId
-        ) return;
-        setSearchResults({
-          matches: [],
-          totalMatches: 0,
-          searchedChapters: 0,
-          searchedPackages: 0,
-          skippedChapters: 0,
-          skippedPackages: 0,
-          warnings: [],
-          error: err instanceof Error ? err.message : String(err)
-        });
-      } finally {
-        if (searchRequestRef.current === searchRequestId) setIsSearching(false);
-      }
-    },
-    [searchOptions]
-  );
-
   const toggleSearchOption = useCallback(
     (key: 'caseSensitive' | 'wholeWord' | 'isRegex') => {
-      searchRequestRef.current += 1;
-      searchWorkspaceRef.current = null;
-      setSearchResults(null);
-      setIsSearching(false);
+      setFindIndex(-1);
       setSearchOptions((prev) => ({ ...prev, [key]: !prev[key] }));
     },
     []
   );
 
   const setSearchQuery = useCallback((query: string) => {
-    searchRequestRef.current += 1;
-    searchWorkspaceRef.current = null;
     setSearchQueryState(query);
-    setSearchResults(null);
-    setIsSearching(false);
+    setFindIndex(-1);
+    if (!query.trim()) setFindTotal(0);
+  }, []);
+
+  const stepFind = useCallback(
+    (direction: 'next' | 'previous') => {
+      setFindIndex((current) => stepMatchIndex(current, findTotal, direction));
+    },
+    [findTotal]
+  );
+
+  // Called by the reader after it highlights; keeps the active index in range.
+  const reportFindTotal = useCallback((total: number) => {
+    setFindTotal(total);
+    setFindIndex((current) => (total === 0 ? -1 : current >= total ? 0 : current < 0 ? 0 : current));
   }, []);
 
   const copyCodeToClipboard = useCallback(async (code: string, codeId: string) => {
@@ -429,16 +392,17 @@ export function useReadingStore() {
     searchQuery,
     setSearchQuery,
     searchOptions,
-    setSearchOptions,
-    searchResults,
-    isSearching,
+    experiments,
+    findIndex,
+    findTotal,
+    stepFind,
+    reportFindTotal,
     copyStatus,
     loadPackageByPath,
     selectChapter,
     clearView,
     updateScroll,
     toggleCompleted,
-    runSearch,
     toggleSearchOption,
     copyCodeToClipboard
   };

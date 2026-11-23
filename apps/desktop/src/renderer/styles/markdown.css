@@ -2,3 +2,232 @@
 .reader pre { padding: 16px; overflow: auto; border-radius: 8px; background: #0f172a; color: #e2e8f0; }
 .reader code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 .reader a { color: #2563eb; }
+
+.reader-markdown-content mark.find-match {
+  color: inherit;
+  background: rgba(234, 179, 8, 0.4);
+  border-radius: 2px;
+}
+
+.reader-markdown-content mark.find-match-active {
+  background: rgba(249, 115, 22, 0.6);
+  outline: 1px solid rgba(249, 115, 22, 0.9);
+}
+
+.experiment-view {
+  height: 100%;
+  overflow: auto;
+  padding: 24px 32px;
+  max-width: 820px;
+}
+
+.experiment-view h2 { margin: 0 0 4px; }
+.experiment-view h3 { margin: 20px 0 6px; font-size: 14px; }
+.experiment-view small { color: var(--workbench-muted); }
+.experiment-actions { display: flex; align-items: center; gap: 8px; margin-top: 20px; }
+.experiment-actions .workbench-text-button { margin: 0; }
+
+.experiment-view-tabs {
+  display: flex;
+  gap: 8px;
+  margin: 16px 0 20px;
+  border-bottom: 1px solid var(--workbench-border);
+  padding-bottom: 8px;
+}
+
+.experiment-view-tabs .workbench-text-button {
+  padding: 8px 12px;
+  margin: 0;
+  font-size: 13px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--workbench-muted);
+  background: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.experiment-view-tabs .workbench-text-button:hover {
+  color: var(--workbench-foreground);
+}
+
+.experiment-view-tabs .workbench-text-button.active {
+  color: var(--workbench-accent);
+  border-bottom-color: var(--workbench-accent);
+}
+
+.experiment-history {
+  height: 100%;
+  overflow: auto;
+  padding: 0;
+}
+
+.experiment-history-filters {
+  display: flex;
+  gap: 8px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--workbench-border);
+  margin-bottom: 12px;
+}
+
+.experiment-history-filters .workbench-text-button {
+  padding: 6px 12px;
+  margin: 0;
+  font-size: 12px;
+  color: var(--workbench-muted);
+  background: none;
+  border: 1px solid transparent;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+
+.experiment-history-filters .workbench-text-button:hover {
+  color: var(--workbench-foreground);
+  border-color: var(--workbench-border);
+}
+
+.experiment-history-filters .workbench-text-button.active {
+  color: var(--workbench-accent);
+  border-color: var(--workbench-accent);
+  background: rgba(37, 99, 235, 0.1);
+}
+
+.experiment-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.experiment-history-item {
+  border: 1px solid var(--workbench-border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.experiment-history-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  background: var(--workbench-panel-bg);
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.2s ease;
+}
+
+.experiment-history-header:hover {
+  background: var(--workbench-panel-hover-bg, rgba(255, 255, 255, 0.05));
+}
+
+.attempt-status {
+  font-weight: 600;
+  min-width: 60px;
+}
+
+.attempt-status.attempt-passed {
+  color: #22c55e;
+}
+
+.attempt-status.attempt-failed {
+  color: #ef4444;
+}
+
+.attempt-status.attempt-running {
+  color: #f59e0b;
+}
+
+.attempt-timestamp {
+  flex: 1;
+  color: var(--workbench-muted);
+  font-size: 12px;
+}
+
+.attempt-duration {
+  color: var(--workbench-muted);
+  font-size: 12px;
+}
+
+.attempt-toggle {
+  color: var(--workbench-muted);
+  transition: transform 0.2s ease;
+}
+
+.experiment-history-header:hover .attempt-toggle {
+  transform: scale(1.2);
+}
+
+.experiment-history-details {
+  padding: 12px;
+  background: var(--workbench-editor-bg);
+  border-top: 1px solid var(--workbench-border);
+  font-size: 12px;
+}
+
+.experiment-history-details section {
+  margin-bottom: 12px;
+}
+
+.experiment-history-details section:last-child {
+  margin-bottom: 0;
+}
+
+.experiment-history-details h5 {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--workbench-foreground);
+}
+
+.experiment-history-details pre {
+  margin: 0;
+  padding: 8px;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 4px;
+  overflow: auto;
+  max-height: 200px;
+  font-size: 11px;
+}
+
+.attempt-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.attempt-steps li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 0;
+  margin: 0;
+}
+
+.step-status {
+  min-width: 20px;
+  font-weight: 600;
+}
+
+.attempt-steps .step-passed .step-status {
+  color: #22c55e;
+}
+
+.attempt-steps .step-failed .step-status {
+  color: #ef4444;
+}
+
+.attempt-steps .step-status {
+  color: #d1d5db;
+}
+
+.step-name {
+  font-weight: 500;
+  color: var(--workbench-foreground);
+}
+
+.step-message {
+  display: block;
+  margin-top: 2px;
+  color: var(--workbench-muted);
+  font-size: 11px;
+}

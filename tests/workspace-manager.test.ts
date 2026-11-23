@@ -53,7 +53,7 @@ describe('workspace-manager and package registry', () => {
     const root = await mkdtemp(path.join(tmpdir(), 'learnlab-ws-pkg-'));
     try {
       const workspaceDir = path.join(root, 'workspace');
-      const pkgDir1 = path.join(root, 'pkg1');
+      const pkgDir1 = path.join(workspaceDir, 'pkg1');
       await mkdir(path.join(pkgDir1, 'chapters'), { recursive: true });
       await writeFile(
         path.join(pkgDir1, 'manifest.yaml'),
@@ -71,7 +71,7 @@ describe('workspace-manager and package registry', () => {
       }
 
       // Try registering pkg2 with same ID
-      const pkgDir2 = path.join(root, 'pkg2');
+      const pkgDir2 = path.join(workspaceDir, 'pkg2');
       await mkdir(path.join(pkgDir2, 'chapters'), { recursive: true });
       await writeFile(
         path.join(pkgDir2, 'manifest.yaml'),
@@ -90,10 +90,11 @@ describe('workspace-manager and package registry', () => {
     }
   });
 
-  it('registers symlinked package and unregistering does not delete target', async () => {
+  it('rejects symlinked packages and leaves the outside target untouched', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'learnlab-ws-sym-'));
     try {
       const workspaceDir = path.join(root, 'workspace');
+      await WorkspaceManager.initWorkspace(workspaceDir);
       const realPkgDir = path.join(root, 'real-pkg');
       await mkdir(path.join(realPkgDir, 'chapters'), { recursive: true });
       await writeFile(
@@ -102,28 +103,46 @@ describe('workspace-manager and package registry', () => {
       );
       await writeFile(path.join(realPkgDir, 'chapters', 'ch1.md'), '# Ch1');
 
-      const linkPkgDir = path.join(root, 'link-pkg');
-      await symlink(realPkgDir, linkPkgDir);
+      // A link outside the workspace and a link placed inside it must both be refused.
+      const outsideLink = path.join(root, 'link-pkg');
+      const insideLink = path.join(workspaceDir, 'inside-link');
+      await symlink(realPkgDir, outsideLink);
+      await symlink(realPkgDir, insideLink);
 
-      const regResult = await WorkspaceManager.registerPackage(workspaceDir, linkPkgDir);
-      expect(regResult.ok).toBe(true);
-      if (regResult.ok) {
-        expect(regResult.value.isSymlink).toBe(true);
-        expect(regResult.value.targetPath).toBe(
-          await (await import('node:fs/promises')).realpath(realPkgDir)
-        );
+      for (const link of [outsideLink, insideLink]) {
+        const result = await WorkspaceManager.registerPackage(workspaceDir, link);
+        expect(result.ok).toBe(false);
+        if (!result.ok) expect(result.error.type).toBe('symlink_not_allowed');
       }
 
-      // Unregister package
-      const unreg = await WorkspaceManager.unregisterPackage(workspaceDir, 'sym.pkg');
-      expect(unreg).toBe(true);
+      expect(await WorkspaceManager.listPackages(workspaceDir)).toHaveLength(0);
+      expect(await readFile(path.join(realPkgDir, 'manifest.yaml'), 'utf8')).toContain('id: sym.pkg');
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
 
-      const packages = await WorkspaceManager.listPackages(workspaceDir);
-      expect(packages.find((p) => p.id === 'sym.pkg')).toBeUndefined();
+  it('rejects a real package directory that lives outside the workspace', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'learnlab-ws-outside-'));
+    try {
+      const workspaceDir = path.join(root, 'workspace');
+      const outsideDir = path.join(root, 'outside-pkg');
+      await mkdir(path.join(outsideDir, 'chapters'), { recursive: true });
+      await writeFile(
+        path.join(outsideDir, 'manifest.yaml'),
+        `id: outside.pkg\nversion: 1.0.0\nname: Outside\nauthor: LearnLab\nchapters:\n  - id: ch1\n    title: Ch1\n    file: ch1.md\n`
+      );
+      await writeFile(path.join(outsideDir, 'chapters', 'ch1.md'), '# Ch1');
 
-      // Ensure real target directory is intact!
-      const manifestStillExists = await readFile(path.join(realPkgDir, 'manifest.yaml'), 'utf8');
-      expect(manifestStillExists).toContain('id: sym.pkg');
+      const result = await WorkspaceManager.registerPackage(workspaceDir, outsideDir);
+      expect(result.ok).toBe(false);
+      if (!result.ok) expect(result.error.type).toBe('outside_workspace');
+
+      // The workspace folder itself and its dependencies/ store are not packages either.
+      for (const target of [workspaceDir, path.join(workspaceDir, 'dependencies')]) {
+        const rejected = await WorkspaceManager.registerPackage(workspaceDir, target);
+        expect(rejected.ok).toBe(false);
+      }
     } finally {
       await rm(root, { recursive: true, force: true });
     }
@@ -139,7 +158,7 @@ describe('workspace-manager and package registry', () => {
       const depSha256 = calculateBufferSha256(archiveBuf);
 
       // Package A
-      const pkgADir = path.join(root, 'pkg-a');
+      const pkgADir = path.join(workspaceDir, 'pkg-a');
       await mkdir(path.join(pkgADir, 'chapters'), { recursive: true });
       await mkdir(path.join(pkgADir, 'bundled-dependencies'), { recursive: true });
       await writeFile(path.join(pkgADir, 'bundled-dependencies', 'tool.tar.gz'), archiveBuf);
@@ -150,7 +169,7 @@ describe('workspace-manager and package registry', () => {
       await writeFile(path.join(pkgADir, 'chapters', 'ch1.md'), '# Ch1');
 
       // Package B (shares the same dependency tool.tar.gz)
-      const pkgBDir = path.join(root, 'pkg-b');
+      const pkgBDir = path.join(workspaceDir, 'pkg-b');
       await mkdir(path.join(pkgBDir, 'chapters'), { recursive: true });
       await mkdir(path.join(pkgBDir, 'bundled-dependencies'), { recursive: true });
       await writeFile(path.join(pkgBDir, 'bundled-dependencies', 'tool.tar.gz'), archiveBuf);
@@ -250,7 +269,7 @@ describe('workspace-manager and package registry', () => {
     const root = await mkdtemp(path.join(tmpdir(), 'learnlab-ws-path-conflict-'));
     try {
       const workspaceDir = path.join(root, 'workspace');
-      const packageDir = path.join(root, 'package');
+      const packageDir = path.join(workspaceDir, 'package');
       await mkdir(path.join(packageDir, 'chapters'), { recursive: true });
       const manifest = (id: string, name: string) =>
         `id: ${id}\nversion: 1.0.0\nname: ${name}\nauthor: Author\nchapters:\n  - id: ch1\n    title: Chapter 1\n    file: ch1.md\n`;

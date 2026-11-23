@@ -7,6 +7,7 @@ export * from './dependency-fingerprint';
 export * from './dependency-importer';
 export * from './package-registry';
 export * from './workspace-manager';
+export * from './package-importer';
 export * from './tar';
 export * from './config-store';
 export * from './database/driver';

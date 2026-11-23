@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+  <defs>
+    <mask id="file-add-cutout" maskUnits="userSpaceOnUse" x="0" y="0" width="16" height="16">
+      <rect width="16" height="16" fill="white"/>
+      <circle cx="12.6" cy="14.1" r="3" fill="black"/>
+    </mask>
+  </defs>
+  <g mask="url(#file-add-cutout)" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M3.4 1.9h5.2l4 4v8.2H3.4V1.9Z"/>
+    <path d="M8.6 1.9v4h4"/>
+  </g>
+  <path d="M10.8 14.1h3.6M12.6 12.3v3.6" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/>
+</svg>

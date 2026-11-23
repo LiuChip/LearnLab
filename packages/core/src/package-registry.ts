@@ -23,20 +23,25 @@ export function createEmptyWorkspaceState(): WorkspaceState {
 
 export async function registerPackage(
   state: WorkspaceState,
-  packageDir: string
+  packageDir: string,
+  workspaceDir: string
 ): Promise<RegisterPackageResult> {
   const resolvedPath = path.resolve(packageDir);
 
-  let isSymlink = false;
-  let targetPath: string | undefined;
   let packageRealPath: string;
 
   try {
     const linkStat = await lstat(resolvedPath);
     if (linkStat.isSymbolicLink()) {
-      isSymlink = true;
-      targetPath = await realpath(resolvedPath);
-    } else if (!linkStat.isDirectory()) {
+      return {
+        ok: false,
+        error: {
+          type: 'symlink_not_allowed',
+          message: `Package path must be a real directory inside the workspace, not a symbolic link: ${resolvedPath}`
+        }
+      };
+    }
+    if (!linkStat.isDirectory()) {
       return {
         ok: false,
         error: {
@@ -87,6 +92,40 @@ export async function registerPackage(
       error: {
         type: 'package_not_found',
         message: `Failed to resolve package path '${resolvedPath}': ${cause.message}`
+      }
+    };
+  }
+
+  // The workspace is a self-contained folder: every registered package must be a
+  // real directory below it. Compare real paths so a symlinked parent cannot
+  // smuggle an outside directory past a lexical prefix check.
+  let workspaceRealPath: string;
+  try {
+    workspaceRealPath = await realpath(path.resolve(workspaceDir));
+  } catch (error) {
+    const cause = error as Error;
+    return {
+      ok: false,
+      error: {
+        type: 'read_error',
+        message: `Failed to resolve workspace path '${workspaceDir}': ${cause.message}`
+      }
+    };
+  }
+  const relativeToWorkspace = path.relative(workspaceRealPath, packageRealPath);
+  const firstSegment = relativeToWorkspace.split(path.sep)[0];
+  if (
+    !relativeToWorkspace ||
+    relativeToWorkspace === '..' ||
+    relativeToWorkspace.startsWith(`..${path.sep}`) ||
+    path.isAbsolute(relativeToWorkspace) ||
+    firstSegment === 'dependencies'
+  ) {
+    return {
+      ok: false,
+      error: {
+        type: 'outside_workspace',
+        message: `Package directory must be inside the workspace (outside directories are not registered; copy or import it into the workspace first): ${resolvedPath}`
       }
     };
   }
@@ -158,8 +197,8 @@ export async function registerPackage(
     name: manifest.name,
     version: manifest.version,
     path: resolvedPath,
-    isSymlink,
-    ...(targetPath ? { targetPath } : {}),
+    // Legacy field kept only so old workspace.db records stay readable.
+    isSymlink: false,
     registeredAt: new Date().toISOString()
   };
 

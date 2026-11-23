@@ -27,7 +27,6 @@ import type {
 type ReadChapterPayload = { content: string; contentHash: string };
 
 const api = {
-  getExamplePackageDir: (): Promise<string> => ipcRenderer.invoke('package:example-dir'),
   loadPackage: (packageDir: string): Promise<Result<LoadedPackage, LoadError>> =>
     ipcRenderer.invoke('package:load', packageDir),
   readChapter: (packageDir: string, chapterFile: string): Promise<Result<ReadChapterPayload, LoadError>> =>
@@ -46,6 +45,13 @@ const api = {
       ipcRenderer.invoke('workspace:init', workspaceDir),
     registerPackage: (workspaceDir: string, packageDir: string): Promise<RegisterPackageResult> =>
       ipcRenderer.invoke('workspace:register-package', workspaceDir, packageDir),
+    importPackage: (
+      workspaceDir: string
+    ): Promise<{ canceled: true } | { canceled: false; result: RegisterPackageResult }> =>
+      ipcRenderer.invoke('workspace:import-package', workspaceDir),
+    isExampleAvailable: (): Promise<boolean> => ipcRenderer.invoke('workspace:example-available'),
+    importExample: (workspaceDir: string): Promise<RegisterPackageResult> =>
+      ipcRenderer.invoke('workspace:import-example', workspaceDir),
     unregisterPackage: (workspaceDir: string, packageId: string): Promise<boolean> =>
       ipcRenderer.invoke('workspace:unregister-package', workspaceDir, packageId),
     listPackages: (workspaceDir: string): Promise<RegisteredPackage[]> =>
@@ -63,7 +69,11 @@ const api = {
     recordExperimentAttempt: (packageDir: string, attempt: ExperimentAttemptDetail): Promise<string> =>
       ipcRenderer.invoke('database:record-experiment-attempt', packageDir, attempt),
     getExperimentAttempts: (packageDir: string, labId: string): Promise<ExperimentAttemptDetail[]> =>
-      ipcRenderer.invoke('database:get-experiment-attempts', packageDir, labId)
+      ipcRenderer.invoke('database:get-experiment-attempts', packageDir, labId),
+    getWorkspaceSetting: (workspaceDir: string, key: string): Promise<string | null> =>
+      ipcRenderer.invoke('database:get-workspace-setting', workspaceDir, key),
+    setWorkspaceSetting: (workspaceDir: string, key: string, value: string): Promise<void> =>
+      ipcRenderer.invoke('database:set-workspace-setting', workspaceDir, key, value)
   },
   config: {
     read: (): Promise<Result<AppConfig, ConfigStoreError>> => ipcRenderer.invoke('config:read'),

@@ -1,6 +1,7 @@
 import { BrowserWindow, type IpcMainInvokeEvent, type WebContents } from 'electron';
 import { pathToFileURL } from 'node:url';
 import * as path from 'node:path';
+import { realpath } from 'node:fs/promises';
 
 interface RendererTrustState {
   workspaces: Set<string>;
@@ -60,6 +61,31 @@ export function assertTrustedPackage(sender: WebContents, packageDir: string): s
   if (!getTrustState(sender).packages.has(normalized)) throw new Error('Package has not been loaded by this application window');
   return normalized;
 }
+export function trustedWorkspaceDirs(sender: WebContents): string[] {
+  return [...getTrustState(sender).workspaces];
+}
+
+/**
+ * A package may be opened only when its real path lies inside a workspace this
+ * window initialised. The renderer's claim about a path is never enough.
+ */
+export async function assertPackageInsideTrustedWorkspace(
+  sender: WebContents,
+  packageDir: string
+): Promise<string> {
+  const normalized = path.resolve(requireNonEmptyString(packageDir, 'packageDir'));
+  const [realPackage, ...realWorkspaces] = await Promise.all([
+    realpath(normalized).catch(() => normalized),
+    ...trustedWorkspaceDirs(sender).map((dir) => realpath(dir).catch(() => dir))
+  ]);
+  const inside = realWorkspaces.some((workspace) => {
+    const relative = path.relative(workspace, realPackage);
+    return relative !== '' && relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative);
+  });
+  if (!inside) throw new Error('Package is not inside a workspace opened by this application window');
+  return normalized;
+}
+
 export function requireIdentifier(value: unknown, name: string): string {
   const identifier = requireNonEmptyString(value, name);
   if (identifier === '.' || identifier === '..' || identifier.includes('/') || identifier.includes('\\')) throw new TypeError(`${name} must be a safe identifier`);

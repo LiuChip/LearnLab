@@ -4,7 +4,7 @@ import {
   type ChapterProgressUpdate, type ExperimentAttemptDetail
 } from '@learnlab/core';
 import { DesktopDatabaseService } from '../services/database';
-import { assertTrustedPackage, assertTrustedRenderer, requireIdentifier, requireNonEmptyString } from './security';
+import { assertTrustedPackage, assertTrustedRenderer, assertTrustedWorkspace, requireIdentifier, requireNonEmptyString } from './security';
 
 function isRecord(value: unknown): value is Record<string, unknown> { return typeof value === 'object' && value !== null && !Array.isArray(value); }
 function validateProgressUpdate(value: unknown): ChapterProgressUpdate | undefined {
@@ -46,5 +46,17 @@ export function registerDatabaseIpc(): void {
   ipcMain.handle('database:get-experiment-attempts', async (event, packageDir: string, labId: string) => {
     assertTrustedRenderer(event);
     return getExperimentAttempts(assertTrustedPackage(event.sender, packageDir), requireIdentifier(labId, 'labId'));
+  });
+
+  ipcMain.handle('database:get-workspace-setting', async (event, workspaceDir: string, key: string) => {
+    assertTrustedRenderer(event);
+    const db = DesktopDatabaseService.getWorkspaceDb(assertTrustedWorkspace(event.sender, workspaceDir));
+    return db.getSetting(requireIdentifier(key, 'key')) ?? null;
+  });
+
+  ipcMain.handle('database:set-workspace-setting', async (event, workspaceDir: string, key: string, value: string) => {
+    assertTrustedRenderer(event);
+    const db = DesktopDatabaseService.getWorkspaceDb(assertTrustedWorkspace(event.sender, workspaceDir));
+    db.setSetting(requireIdentifier(key, 'key'), requireNonEmptyString(value, 'value'));
   });
 }

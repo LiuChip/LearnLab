@@ -45,6 +45,13 @@ export interface NotificationEntry extends ToastNotification {
   createdAt: number;
   read: boolean;
   toastVisible: boolean;
+  permissionRequest?: {
+    plugin: string;
+    scope: string;
+    read: string;
+    execute: string;
+    status: 'pending' | 'once' | 'always' | 'denied';
+  };
 }
 
 export interface ExperimentRun {
@@ -139,6 +146,8 @@ export type WorkbenchAction =
   | { type: 'expireNotification'; notificationId: string }
   | { type: 'clearNotifications' }
   | { type: 'dismissNotification'; notificationId: string }
+  | { type: 'resolvePermissionRequest'; notificationId: string; decision: 'once' | 'always' | 'denied' }
+  | { type: 'replayPermissionRequest' }
   | { type: 'addNotification'; notification: ToastNotification }
   | { type: 'toggleNotificationCenter' };
 
@@ -349,6 +358,30 @@ export function createInitialState(): WorkbenchState {
     notificationSequence: 0,
     unreadMessages: 2,
     notificationCenterVisible: false
+  };
+}
+
+export function createPermissionPreviewState(): WorkbenchState {
+  const initial = createInitialState();
+  return {
+    ...initial,
+    notifications: [{
+      id: 'permission-preview',
+      level: 'info',
+      title: '插件请求权限',
+      message: 'learnlab-plugin-runner · 当前实验包',
+      createdAt: Date.now(),
+      read: false,
+      toastVisible: true,
+      permissionRequest: {
+        plugin: 'learnlab-plugin-runner',
+        scope: '当前实验包',
+        read: '当前实验包中的章节与资源文件',
+        execute: '当前实验包的实验命令',
+        status: 'pending'
+      }
+    }],
+    unreadMessages: 1
   };
 }
 
@@ -651,12 +684,29 @@ export function workbenchReducer(state: WorkbenchState, action: WorkbenchAction)
         )
       );
     case 'clearNotifications':
-      return updateNotifications(state, []);
+      return updateNotifications(state, state.notifications.filter((item) => item.permissionRequest?.status === 'pending'));
     case 'dismissNotification':
       return updateNotifications(
         state,
-        state.notifications.filter((item) => item.id !== action.notificationId)
+        state.notifications.flatMap((item) => item.id !== action.notificationId
+          ? [item]
+          : item.permissionRequest?.status === 'pending'
+            ? [{ ...item, toastVisible: false }]
+            : [])
       );
+    case 'resolvePermissionRequest':
+      return updateNotifications(state, state.notifications.map((item) =>
+        item.id === action.notificationId && item.permissionRequest?.status === 'pending'
+          ? { ...item, toastVisible: false, permissionRequest: { ...item.permissionRequest, status: action.decision } }
+          : item
+      ));
+    case 'replayPermissionRequest':
+      return updateNotifications({ ...state, notificationCenterVisible: false }, state.notifications.map((item) =>
+        item.permissionRequest
+          ? { ...item, createdAt: Date.now(), read: false, toastVisible: true,
+              permissionRequest: { ...item.permissionRequest, status: 'pending' as const } }
+          : item
+      ));
     case 'addNotification':
       return notify(state, action.notification);
     case 'toggleNotificationCenter':

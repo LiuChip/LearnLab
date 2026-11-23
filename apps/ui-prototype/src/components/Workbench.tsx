@@ -2,6 +2,7 @@ import { useEffect, useReducer, useRef, useState } from 'preact/hooks';
 import {
   allChapters,
   createInitialState,
+  createPermissionPreviewState,
   experiments,
   workbenchReducer,
   type WorkbenchAction
@@ -35,11 +36,15 @@ function ExperimentTimer({
 }
 
 export function Workbench() {
-  const [state, dispatch] = useReducer(workbenchReducer, undefined, () => ({
-    ...createInitialState(),
-    primaryVisible: window.innerWidth >= 600,
-    auxiliaryVisible: window.innerWidth >= 1100
-  }));
+  const [state, dispatch] = useReducer(workbenchReducer, undefined, () => {
+    const permissionPreview = new URLSearchParams(window.location.search).get('permissionPreview') === '1';
+    const initial = permissionPreview ? createPermissionPreviewState() : createInitialState();
+    return {
+      ...initial,
+      primaryVisible: window.innerWidth >= 600,
+      auxiliaryVisible: window.innerWidth >= 1100
+    };
+  });
   const [primaryWidth, setPrimaryWidth] = useState(260);
   const [auxiliaryWidth, setAuxiliaryWidth] = useState(300);
   const [panelHeight, setPanelHeight] = useState(220);
@@ -232,6 +237,11 @@ export function Workbench() {
         </div>
       </footer>
       <NotificationHost state={state} dispatch={dispatch} />
+      {new URLSearchParams(window.location.search).get('permissionPreview') === '1' && (
+        <button class="permission-preview-replay" type="button" onClick={() => dispatch({ type: 'replayPermissionRequest' })}>
+          重新发送请求
+        </button>
+      )}
       {experiments.map((experiment) => (
         <ExperimentTimer
           key={experiment.id}

@@ -10,6 +10,8 @@
 pnpm --filter @learnlab/ui-prototype dev
 ```
 
+权限通知的设计预览：在原型地址后附加 `?permissionPreview=1`。这里的授权按钮只更改模拟状态，不会授予真实插件权限。
+
 生产构建与检查：
 
 ```bash

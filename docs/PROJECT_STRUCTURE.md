@@ -183,7 +183,7 @@ learnlab/                              # LearnLab 源码仓库
 
 ```text
 sql-intro/                          # 当前支持目录型加载；归档格式待实现
-├── manifest.yaml                   # 包元数据、实验数量、插件和运行依赖
+├── manifest.yaml                   # 包元数据、可选包图标、实验数量、插件和运行依赖
 ├── chapters/
 │   ├── 01-select.md                # Markdown 正文
 │   └── 02-where.md
@@ -195,6 +195,7 @@ sql-intro/                          # 当前支持目录型加载；归档格式
 │   └── where-basic/
 │       └── experiment.yaml
 ├── assets/                         # 图片、视频和其他资源
+│   └── package-icon.svg            # 可选：作者注册的实验包列表图标
 ├── notes/                          # 包内可选笔记资源
 ├── bundled-dependencies/           # 可选：小众独立运行时的分发来源
 ├── package.db                      # 当前已用的逻辑数据库路径
@@ -203,7 +204,7 @@ sql-intro/                          # 当前支持目录型加载；归档格式
 
 实验包中的代码由插件决定如何解释和执行。LearnLab 核心只负责：
 
-1. 解析包结构和 manifest；
+1. 解析包结构和 manifest；设计上包可声明可选的 `icon` 相对路径，推荐为 `assets/package-icon.svg`，但当前校验器忽略该字段，尚不能显示作者图标；
 2. 加载 Markdown 章节；资源访问仍需按类型补充安全路径；
 3. 根据包声明解析所需插件；
 4. 未来把当前实验包作用域交给获得授权的插件；当前只完成上下文/权限纯逻辑；
@@ -211,7 +212,7 @@ sql-intro/                          # 当前支持目录型加载；归档格式
 
 ## 6. 依赖来源和最终归档
 
-实验包可以只声明依赖，也可以在 `bundled-dependencies/` 中携带小众独立运行时。依赖仓库下载的运行时和实验包携带的运行时，导入后都归档到当前学习区的 `dependencies/`；这里是 LearnLab 管理运行时的唯一事实位置。
+实验包可以只声明依赖，也可以在 `bundled-dependencies/` 中携带小众独立运行时。依赖仓库下载的运行时和实验包携带的运行时，导入后都归档到当前学习区的 `dependencies/`；这里是 LearnLab 管理运行时的唯一事实位置。依赖条目默认使用 `ICON-DEPENDENCY-01`；如果依赖自身注册了通过宿主校验的图标，则无论依赖来自实验包附带资源还是依赖仓库，都优先使用注册图标。注册协议、资源格式和安全加载接线仍待实现。
 
 需要系统级安装的软件不进入该目录，而由 `external_prerequisites` 声明并由插件检测和引导。
 
@@ -223,7 +224,7 @@ sql-intro/                          # 当前支持目录型加载；归档格式
 ├── plugins/                         # 已安装插件
 └── workspaces/
     └── 学习区/
-        ├── workspace.db             # 包清单、软连接和学习区状态
+        ├── workspace.db             # 区内包清单和学习区状态
         ├── dependencies/            # 该学习区共享的实际独立运行时
         │   ├── org.llvm.clang/18.1.8/darwin-arm64/<sha256>/
         │   ├── org.mysql.runtime/8.4.0/linux-x64/<sha256>/
@@ -248,5 +249,6 @@ sql-intro/                          # 当前支持目录型加载；归档格式
 - 官方插件优先使用 TypeScript 编写桥接层；
 - 外部环境通过进程或 CLI 接入，不把 Python/MySQL/C++ 等环境源码塞进 LearnLab 核心；
 - 实验包只要能被 `manifest.yaml` 描述、被阅读器加载、被相应插件执行即可；
+- 实验包身份图标是可选包资源：学习区列表优先显示作者声明且通过校验的 `icon`，缺失或无效时回退 LearnLab 默认包装盒；作者图标不得覆盖宿主核心图标、其他包或文件类型图标；
 - 不为了“全项目统一语言”而重写环境工具；
 - 暂不为每一种外部语言都开发 SDK，先稳定跨进程插件协议。

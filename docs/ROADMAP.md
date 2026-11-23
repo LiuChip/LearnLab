@@ -6,7 +6,7 @@
 
 目标是完成一条可信的本地学习链路：导入课程目录，阅读章节，打开实验标签，在受监督的环境中执行，由手动或插件判定结果，保存并查看历史。第一条真实环境链路选 MySQL；更多学科和第三方插件在这条链路验证后再开放。
 
-当前已有 Electron/Preact Workbench、目录型包读取、进度、依赖/插件解析、安全的 bundled dependency 导入、持久化模块和核心遍历式学习区搜索。正式 UI 仍缺包导入、现行当前文件查找、实验卡片和实际运行。新建 `.db` 持久文件默认使用便携 JSON driver，`README` 和[数据模型](DATA_MODEL.md)说明当前限制。
+当前已有 Electron/Preact Workbench、目录型包读取、进度、依赖/插件解析、安全的 bundled dependency 导入、持久化模块、学习区内包导入（外部目录先复制再登记，拒绝软连接与区外目录）、当前文件查找，核心遍历式学习区搜索保留为内部能力。正式 UI 仍缺实验卡片和实际运行。新建 `.db` 持久文件默认使用便携 JSON driver，`README` 和[数据模型](DATA_MODEL.md)说明当前限制。
 
 实施顺序按**可独立验收的里程碑**划分。M1 是近期目标；M2 至 M4 构成首个真实实验闭环；M5 处理作者、分发和发布质量。每个里程碑完成时更新 [API 总表](API_REFERENCE.md)、[测试策略](TEST_STRATEGY.md)、[文档状态](STATUS.md)和 README。
 
@@ -14,23 +14,29 @@
 
 **依赖**：现有目录型包、学习区和 Workbench 模块。
 
-1. 为当前 renderer 接入受控本地目录选择、包校验与登记；学习区可新建、打开和切换。复用 `workspace:register-package`、`workspace:init` 与目录型 `package-loader`；主进程负责路径安全和失败清理。示例包必须能经同一入口登记，空学习区有明确下一步。
-2. 修正搜索范围：`SearchReplaceView.tsx`、`App.tsx`、`readingStore.ts` 默认显示“当前文件 / 当前实验包 / 当前学习区”三个文字选项，仅当前文件可用；切到查找模式，在当前章节定位、高亮并上/下跳转。空输入立即清空，输入防抖与过期请求隔离继续有效。暂不把包/学习区搜索或替换写入当成可用交互。核心现有遍历搜索可保留为内部能力。
-3. 修复[Workbench 视觉反馈](reviews/2026-09-15-workbench-visual-feedback.md)中的基础导航问题：章节层级、底部设置入口、搜索选中/焦点、快速打开主题与窄窗可达性。正式 renderer 与原型按同状态比较；原型不能代替真实应用验收。
-4. 保存并恢复用户期望的最小阅读会话，先明确“当前包/章节/滚动位置”的数据归属，再决定是否恢复标签和布局。必须与现有内容指纹重置规则兼容。
+[已于 2026-11-23 完成：主进程目录选择 + `importPackageIntoWorkspace`，登记仅接受区内真实目录；旧 `is_symlink` 字段仅作旧记录兼容] 1. 为当前 renderer 接入受控本地目录选择、包校验与登记；学习区可新建、打开和切换。复用 `workspace:register-package`、`workspace:init` 与目录型 `package-loader`；主进程负责路径安全和失败清理。外部导入来源需先复制/解压到当前学习区，再登记区内实际目录；收紧 `package-registry.ts`、`workspace-manager.ts` 的包登记范围，并明确 `workspace-db.ts` 旧软连接记录的兼容处理。示例包必须能经同一入口登记，空学习区有明确下一步。
+[已于 2026-11-23 完成：当前文件查找，范围选项中其余两项禁用] 2. 修正搜索范围：`SearchReplaceView.tsx`、`App.tsx`、`readingStore.ts` 默认显示”当前文件 / 当前实验包 / 当前学习区”三个文字选项，仅当前文件可用；切到查找模式，在当前章节定位、高亮并上/下跳转。空输入立即清空，输入防抖与过期请求隔离继续有效。暂不把包/学习区搜索或替换写入当成可用交互。核心现有遍历搜索可保留为内部能力。
+[部分完成：Activity Bar 底部设置入口已恢复为禁用占位，其余仍待办] 3. 修复[Workbench 视觉反馈](reviews/2026-09-15-workbench-visual-feedback.md)中的基础导航问题：章节层级、底部设置入口、搜索选中/焦点、快速打开主题与窄窗可达性。正式 renderer 与原型按同状态比较；原型不能代替真实应用验收。
+[已于 2026-11-23 完成：上次打开的包 + 章节经 `workspace_settings` 持久化，启动时恢复] 4. 保存并恢复用户期望的最小阅读会话，先明确”当前包/章节/滚动位置”的数据归属，再决定是否恢复标签和布局。必须与现有内容指纹重置规则兼容。
 
-**退出标准**：新用户在空学习区中能经 UI 登记本地示例目录并阅读两个章节；重新打开后进度可见；当前文件查找在章节切换、空输入、非法正则和过期请求下不产生旧结果；1024×768 与宽窗口没有不可达入口。受影响文件：`apps/desktop/src/main/ipc/`、`apps/desktop/src/preload/`、`apps/desktop/src/renderer/App.tsx`、`components/navigation/`、`stores/readingStore.ts`、`packages/core/src/search.ts` 及相应测试。
+**退出标准**：新用户在空学习区中能经 UI 将本地示例导入学习区后登记并阅读两个章节；区外实际包和指向区外的包软连接不得登记；重新打开后进度可见；当前文件查找在章节切换、空输入、非法正则和过期请求下不产生旧结果；1024×768 与宽窗口没有不可达入口。受影响文件：`apps/desktop/src/main/ipc/`、`apps/desktop/src/preload/`、`apps/desktop/src/renderer/App.tsx`、`components/navigation/`、`stores/readingStore.ts`、`packages/core/src/search.ts` 及相应测试。
 
-## M2：实验内容、标签与历史界面
+## M1.5：实验标记与标签
 
-**依赖**：M1 的可用章节与标签模型。
+2026-11-23 完成：章节内用标准 fenced code block（```lab）声明实验，YAML 格式解析 id/title/type/instruction/hints。
+实验在侧栏列出，点击”打开实验”打开标签，标签内显示说明和提示（提示可折叠），运行/重置由后续里程碑提供。
+示例包已补 select-all-users 实验。
 
-1. 解析 Markdown 中声明的实验标记和实验 YAML；解析错误只影响相应实验区域，正文仍可阅读。实验卡片的**“打开实验”只打开或聚焦标签**，不直接启动程序。
-2. 扩展当前只支持章节的 `tabStore.ts`/`EditorTabs.tsx`，为实验建立包 ID + 实验 ID 的唯一键。打开同一实验聚焦旧标签；跨包切换不串状态。实验标签内展示目标、环境、提示、答案、执行入口与重置入口。具体执行能力由 M3/M4 提供。
-3. 接入 `experiment_history/` 的读取 UI：本实验“查看全部 / 只看成功 / 只看失败”文字筛选、失败详情展开、空结果和损坏单条记录处理。手动失败固定记录“用户判定实验失败”；自动失败忠实显示判定器返回的理由与分项结果。阅读百分比始终只计章节。
-4. 明确存储兼容：当前代码把 `<workspace>/workspace.db`、`<package>/package.db` 与 `<package>/experiment_history/` 放在目录根部；规范要决定是否保留这些路径，任何迁移都要有显式备份、回滚与旧数据测试，不能仅改文档路径。
+## M2：实验执行与历史
 
-**退出标准**：目录型 fixture 的实验卡片可打开/聚焦独立标签，缺失插件时仍能阅读且不能执行；预置历史记录按当前实验筛选、展开，失败来源正确；章节进度不被实验结果改变。主要位置：`packages/markdown/`、`packages/core-types/`、`packages/core/src/experiment-history.ts`、`apps/desktop/src/renderer/components/content/`、`apps/desktop/src/renderer/stores/tabStore.ts` 和端到端 fixture。
+**依赖**：M1.5 的实验模型和标签系统。
+
+[已于 2026-11-23 完成：实验历史读取 UI] 1. 接入 `experiment_history/` 的读取 UI：本实验”查看全部 / 只看成功 / 只看失败”文字筛选、失败详情展开、空结果和损坏单条记录处理。手动失败固定记录”用户判定实验失败”；自动失败忠实显示判定器返回的理由与分项结果。阅读百分比始终只计章节。
+[已于 2026-11-23 完成：路径确认；workspace_settings 读写 IPC 已实现] 2. 明确存储兼容：当前代码把 `<workspace>/workspace.db`、`<package>/package.db` 与 `<package>/experiment_history/` 放在目录根部；路径已确认为规范路径，不迁移。`workspace_settings` 表新增 `last_package_id`/`last_chapter_id` 用于最小阅读会话恢复。
+3. 插件宿主执行模型
+4. 实验历史记录
+
+**退出标准**：目录型 fixture 的实验标签在缺失插件时仍能阅读且不能执行；预置历史记录按当前实验筛选、展开，失败来源正确；章节进度不被实验结果改变。主要位置：`packages/core/src/experiment-history.ts`、`apps/desktop/src/renderer/components/content/`、`apps/desktop/src/renderer/stores/tabStore.ts` 和端到端 fixture。
 
 ## M3：受控插件宿主与执行监督
 
@@ -61,7 +67,7 @@
 1. 确定 `.labpkg` 归档格式/版本和旧数据兼容策略；LabKit 提供真正的 `validate`、`preview`、`pack` CLI 入口。归档下载、校验、解包、导入使用临时目录和失败回滚；不得把现有 tar 原语或空 `pack.ts` 宣称为完成。
 2. 明确源索引、校验与来源展示的最小协议，再实现 GitHub/自定义课程源和依赖源；离线已登记课程不依赖源服务。
 3. 按真实使用补齐原生菜单、受控窗口命令、Fatal 隔离、视图位置记忆与必要的笔记功能。GUI LabKit、播放器内轻编辑、第三方 SDK 和云同步分别作为后续决策，不混入这轮发布门槛。
-4. 根据[视觉反馈](reviews/2026-09-15-workbench-visual-feedback.md)做正式 UI 与图标验收。当前搜索图标是已署名的 Codicons 资产；如坚持全自有图标，需要替换它并更新[第三方版权说明](../THIRD_PARTY_NOTICES.md)，替换前持续保留署名。
+4. 根据[视觉反馈](reviews/2026-09-15-workbench-visual-feedback.md)做正式 UI 与图标验收。实验包列表使用默认包装盒图标；作者可为自己的包声明可选图标。依赖列表默认使用单个软件包图标，依赖自身可注册经宿主校验的图标覆盖默认图标，实验包附带依赖和仓库下载依赖遵循同一规则。实施时补齐 manifest/依赖描述字段、包内资源路径/类型/大小校验、安全加载和失败诊断；无效或加载失败时回退默认图标，不阻断列表或阅读，也不允许覆盖宿主/其他包图标。当前类型、校验器、注册记录与 renderer 均未接入作者或依赖图标。当前搜索图标是已署名的 Codicons 资产；如坚持全自有图标，需要替换它并更新[第三方版权说明](../THIRD_PARTY_NOTICES.md)，替换前持续保留署名。
 5. 选择目标 OS/架构，完成打包工具选择、安装包、权限说明、卸载与数据保留策略、跨平台手工验收。补充真实截图和已知限制后再称可下载版本。
 
 **退出标准**：作者可用有文档的 CLI 打包目录型课程，用户可经 UI 安全导入归档；截断/恶意归档不留下半成品；目标平台安装包可启动且同一真实实验复现；README 与发布说明不把计划能力写成已发布能力。

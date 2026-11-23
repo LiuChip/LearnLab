@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'preact/hooks';
+import { useEffect, useRef, useState } from 'preact/hooks';
 import type { NotificationEntry, WorkbenchAction, WorkbenchState } from '../model/workbench';
 import { scheduleNotificationExpiry } from '../model/notification-timer';
 
@@ -13,6 +13,9 @@ function NotificationItem({
   dispatch: Dispatch;
   center?: boolean;
 }) {
+  const [allowMenuOpen, setAllowMenuOpen] = useState(false);
+  const permission = notification.permissionRequest;
+  const pending = permission?.status === 'pending';
   const elapsedAtMount = useRef(Math.min(7000, Math.max(0, Date.now() - notification.createdAt)));
   useEffect(() => {
     if (center) return;
@@ -30,21 +33,43 @@ function NotificationItem({
 
   return (
     <article
-      class={`${center ? 'notification-center-item' : 'notification'} notification-${notification.level}`}
+      class={`${center ? 'notification-center-item' : 'notification'} notification-${notification.level}${permission ? ' notification-permission' : ''}`}
     >
-      <span class="notification-mark">{notification.level === 'info' ? 'i' : '!'}</span>
+      <span class="notification-mark" aria-hidden="true">{notification.level === 'info' ? 'i' : '!'}</span>
       <div class="notification-copy">
         <strong>{notification.title}</strong>
         <p>{notification.message}</p>
+        {permission && (
+          pending ? (
+            <div class="notification-permission-scope">
+              <div>读取：{permission.read}</div>
+              <div>执行：{permission.execute}</div>
+            </div>
+          ) : <p>权限请求已{permission.status === 'denied' ? '拒绝' : permission.status === 'once' ? '单次允许' : '始终允许'}</p>
+        )}
+        {pending && (
+          <div class="notification-permission-actions">
+            <button type="button" onClick={() => dispatch({ type: 'resolvePermissionRequest', notificationId: notification.id, decision: 'denied' })}>拒绝</button>
+            <div class="notification-allow-menu">
+              <button type="button" class="notification-allow" aria-expanded={allowMenuOpen} onClick={() => setAllowMenuOpen(!allowMenuOpen)}>允许 <span aria-hidden="true">⌄</span></button>
+              {allowMenuOpen && (
+                <div class="notification-allow-options" role="menu">
+                  <button type="button" role="menuitem" onClick={() => dispatch({ type: 'resolvePermissionRequest', notificationId: notification.id, decision: 'once' })}>单次允许</button>
+                  <button type="button" role="menuitem" onClick={() => dispatch({ type: 'resolvePermissionRequest', notificationId: notification.id, decision: 'always' })}>始终允许</button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
-      <button
+      {(!center || !pending) && <button
         class="notification-close"
         title="关闭通知"
         aria-label={`关闭${notification.title}`}
         onClick={() => dispatch({ type: 'dismissNotification', notificationId: notification.id })}
       >
         ×
-      </button>
+      </button>}
       {!center && notification.level === 'info' ? (
         <div
           class="notification-progress"
@@ -79,7 +104,7 @@ export function NotificationHost({
             .filter((item) => item.toastVisible)
             .map((notification) => (
               <NotificationItem
-                key={notification.id}
+                key={`${notification.id}:${notification.createdAt}`}
                 notification={notification}
                 dispatch={dispatch}
               />
@@ -95,7 +120,7 @@ export function NotificationHost({
                 class="ghost-button"
                 title="清空通知"
                 aria-label="清空通知"
-                disabled={!state.notifications.length}
+                disabled={!state.notifications.some((item) => item.permissionRequest?.status !== 'pending')}
                 onClick={() => dispatch({ type: 'clearNotifications' })}
               >
                 ≡×
@@ -113,7 +138,7 @@ export function NotificationHost({
           <div class="notification-center-list">
             {[...state.notifications].reverse().map((notification) => (
               <NotificationItem
-                key={notification.id}
+                key={`${notification.id}:${notification.createdAt}`}
                 notification={notification}
                 dispatch={dispatch}
                 center

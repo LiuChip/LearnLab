@@ -3,6 +3,7 @@ import {
 	WORKBENCH_ACTIVITY_LABELS,
 	type WorkbenchActivityId
 } from '../../utils/workbench';
+import settingsIconUrl from '../../assets/icons/actions/settings.svg?url';
 
 const glyphs: Record<WorkbenchActivityId, string> = {
 	chapters: '章',
@@ -40,6 +41,23 @@ export function ActivityBar({ activeActivity, primaryVisible, onSelect }: Activi
 						</button>
 					);
 				})}
+			</div>
+			{/* Bottom entry stays pinned and does not scroll with the list above.
+			    The settings page is not wired yet, so it is a labelled disabled placeholder. */}
+			<div class="workbench-activity-footer">
+				<button
+					type="button"
+					class="workbench-activity-button"
+					aria-label="设置（尚未开放）"
+					title="设置（尚未开放）"
+					disabled
+				>
+					<span
+						class="workbench-mask-icon"
+						aria-hidden="true"
+						style={{ maskImage: `url("${settingsIconUrl}")`, WebkitMaskImage: `url("${settingsIconUrl}")` }}
+					/>
+				</button>
 			</div>
 		</nav>
 	);

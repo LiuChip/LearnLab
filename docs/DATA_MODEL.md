@@ -13,9 +13,11 @@ LearnLab 只保留两层数据库，避免把学习区组织关系和实验包�
 
 ### 数据决策的冻结边界
 
-存储归属已经确定：学习区数据库负责包登记、软连接和共享依赖；实验包数据库负责章节、阅读进度和轻量实验摘要；详细运行数据放在 `experiment_history/`；插件设置随配置 JSON 导入/导出。完整表结构、迁移版本、跨路径重连、搜索索引、历史清理和 UI 会话持久化仍未冻结，见[公开决策索引](DECISIONS.md)的 `DATA-*` 条目。
+存储归属已经确定：学习区数据库负责区内实验包登记和共享依赖；实验包数据库负责章节、阅读进度和轻量实验摘要；详细运行数据放在 `experiment_history/`；插件设置随配置 JSON 导入/导出。完整表结构、迁移版本、旧登记记录兼容、搜索索引、历史清理和 UI 会话持久化仍未冻结，见[公开决策索引](DECISIONS.md)的 `DATA-*` 条目。
 
 当前代码使用 `<workspace>/workspace.db`、`<package>/package.db` 和 `<package>/experiment_history/`。早期示意图中的 `.learnlab/` 子目录不是现行持久化路径；如果未来迁移，必须设计兼容、备份与回滚，见[路线图 M2](ROADMAP.md)。
+
+学习区是一个自包含的本地文件夹：除自身管理文件和共享依赖等内部目录外，内容以实验包目录组织；所有实验包的实际目录都位于学习区内，不通过软连接登记学习区外的实验包，也不设计跨盘联动、断链修复或单个实验包离线状态。
 
 ## 学习区数据库：`workspace.db`
 
@@ -39,17 +41,20 @@ LearnLab 的便携 JSON driver；现有便携文件继续按该格式打开。�
 
 | 实体 | 关键字段 | 用途 |
 |:---|:---|:---|
-| `packages` | `package_id`, `path`, `version`, `display_name` | 登记实验包目录或软连接 |
-| `links` | `link_path`, `target_path` | 记录学习区中的软连接 |
+| `packages` | `package_id`, `path`, `version`, `display_name` | 登记学习区内的实际实验包目录；作者图标路径由包 manifest 和目录派生，当前不单独持久化 |
 | `workspace_settings` | `key`, `value` | 学习区级显示设置 |
 | `dependency_records` | `dependency_id`, `version`, `platform`, `arch`, `sha256`, `path`, `source_type`, `source_package_id`, `status` | 记录共享独立运行时的实际位置、来源和准备状态 |
 | `package_dependencies` | `package_id`, `dependency_id`, `required_version`, `resolved_version`, `resolved_sha256`, `source_type`, `status` | 记录包声明与实际共享依赖实例的对应关系 |
 
-`path` 是本地位置，不作为跨设备稳定身份。实验包移动到未登记的位置时，可以被视为新安装位置，原进度不承诺保留。
+代码已收紧包登记：只接受学习区内的真实目录，软连接和区外目录被拒绝，区外来源先复制到学习区再登记。`links` 表与 `is_symlink`/`target_path` 字段仅为兼容旧数据库而保留，新登记一律写入 `is_symlink = 0`，不构成功能承诺；是否迁移删除须另行设计备份与回滚。包内文件和依赖导入的符号链接逃逸检查继续保留。
+
+`path` 是学习区内的本地位置，不作为跨设备稳定身份。实验包移动到未登记的位置时，可以被视为新安装位置，原进度不承诺保留。
 
 ## 实验包数据库：`package.db`
 
 实验包数据库负责“这个包有哪些章节、用户读到哪里、实验当前是什么状态”。章节可以由 LearnLab 扫描 Markdown 文件建立索引；实验总数以作者在 manifest 声明的 `experiment_count` 为准，扫描结果用于校验和定位，而不是替换作者的统计口径。
+
+作者图标是可选的包内展示资源，可由包 manifest 的 `icon` 相对路径指向（推荐 `assets/package-icon.svg`）。它不属于阅读进度或实验状态，不写入 `package.db`；宿主加载失败时回退默认包装盒并保留诊断原因。该字段和资源校验仍待实现，当前数据库 schema 不增加图标列。
 
 建议实体：
 
@@ -64,7 +69,7 @@ LearnLab 的便携 JSON driver；现有便携文件继续按该格式打开。�
 
 ## 正文搜索
 
-当前核心的 `searchWorkspace` 遍历当前学习区内已登记实验包的章节 Markdown 正文；**没有后台搜索索引文件**。现行 MVP 界面设计先开放当前文件查找，正式 renderer 尚需从现有学习区搜索入口改成这一交互。未来若开放跨文件搜索并引入索引，索引只能是可删除、可重建缓存，不能成为进度或历史的事实来源；具体路径和更新策略届时再定。
+当前核心的 `searchWorkspace` 遍历当前学习区内已登记实验包的章节 Markdown 正文，保留为内部能力；**没有后台搜索索引文件**。正式界面只开放当前文件查找，在已渲染章节上完成匹配与高亮，不经 IPC。未来若开放跨文件搜索并引入索引，索引只能是可删除、可重建缓存，不能成为进度或历史的事实来源；具体路径和更新策略届时再定。
 
 ## 实验历史文件
 
@@ -118,7 +123,7 @@ LearnLab 的便携 JSON driver；现有便携文件继续按该格式打开。�
 - 数据库损坏时优先进入只读模式；
 - 笔记索引可以从 Markdown 文件重建；
 - 清理 `tmp/` 不得删除数据库和 `experiment_history/`；
-- 删除软连接不得删除目标目录；
+- 实验包的实际路径必须位于学习区内；旧外部软连接记录的兼容处理不得删除外部目标目录；
 - 包升级不得覆盖当前根目录的 `package.db` 和 `experiment_history/`；未来若增加独立运行临时目录，也不得覆盖用户数据；
 - 内容指纹变化时，只有对应章节阅读进度重置为 0%；新增且未改动的章节不影响原有章节进度；
 - `experiment_count` 由作者声明，manifest 更新时若作者声明变更则更新展示和统计；

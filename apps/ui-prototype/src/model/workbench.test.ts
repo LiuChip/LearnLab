@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   createInitialState,
+  createPermissionPreviewState,
   findSearchMatches,
   getSearchDocuments,
   replaceSearchText,
@@ -9,6 +10,27 @@ import {
 } from './workbench';
 
 describe('workbenchReducer', () => {
+  it('keeps a pending permission request actionable after its toast expires or the center is cleared', () => {
+    let state = createPermissionPreviewState();
+    expect(state.notifications).toHaveLength(1);
+    expect(state.notifications[0].permissionRequest?.status).toBe('pending');
+    state = workbenchReducer(state, { type: 'expireNotification', notificationId: 'permission-preview' });
+    expect(state.notifications[0].toastVisible).toBe(false);
+    state = workbenchReducer(state, { type: 'toggleNotificationCenter' });
+    expect(state.unreadMessages).toBe(0);
+    state = workbenchReducer(state, { type: 'clearNotifications' });
+    expect(state.notifications[0].permissionRequest?.status).toBe('pending');
+    state = workbenchReducer(state, { type: 'resolvePermissionRequest', notificationId: 'permission-preview', decision: 'once' });
+    expect(state.notifications[0].permissionRequest?.status).toBe('once');
+  });
+
+  it('does not treat closing a pending permission toast as a denial', () => {
+    const state = workbenchReducer(createPermissionPreviewState(), {
+      type: 'dismissNotification', notificationId: 'permission-preview'
+    });
+    expect(state.notifications[0].permissionRequest?.status).toBe('pending');
+    expect(state.notifications[0].toastVisible).toBe(false);
+  });
   it('opens an experiment once and activates its existing tab on repeated requests', () => {
     const initial = createInitialState();
     const opened = workbenchReducer(initial, {

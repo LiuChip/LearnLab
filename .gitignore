@@ -19,3 +19,9 @@ UNFREEZE.md
 
 # Local icon design ledger
 ICON.md
+
+# Per-learner runtime data (never commit, never ship in fixtures)
+package.db
+experiment_history/
+workspace.db
+workspace.json

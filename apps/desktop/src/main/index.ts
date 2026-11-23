@@ -9,6 +9,7 @@ import { registerPackageIpc } from './ipc/package.ipc';
 import { registerPluginIpc } from './ipc/plugin.ipc';
 import { DesktopDatabaseService } from './services/database';
 import {
+  assertPackageInsideTrustedWorkspace,
   assertTrustedPackage,
   assertTrustedRenderer,
   rememberPackage,
@@ -86,13 +87,10 @@ if (!gotSingleInstanceLock) {
   app.whenReady().then(() => {
     appReady = true;
 
-    ipcMain.handle('package:example-dir', (event) => {
-      assertTrustedRenderer(event);
-      return join(app.getAppPath(), '../../examples/packages/sql-intro');
-    });
     ipcMain.handle('package:load', async (event, packageDir: string) => {
       assertTrustedRenderer(event);
-      const result = await loadPackage(requireNonEmptyString(packageDir, 'packageDir'));
+      const trusted = await assertPackageInsideTrustedWorkspace(event.sender, packageDir);
+      const result = await loadPackage(trusted);
       if (result.ok) rememberPackage(event.sender, result.value.dir);
       return result;
     });

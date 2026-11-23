@@ -1,61 +1,59 @@
-import { useEffect, useRef } from 'preact/hooks';
-import type { SearchMatch, SearchOptions, SearchResult } from '@learnlab/core';
-import { scheduleLiveSearch } from '../../stores/searchInput';
+import { findInText } from '@learnlab/markdown';
 
 interface SearchReplaceViewProps {
   query: string;
-  options: Omit<SearchOptions, 'query'>;
-  results: SearchResult | null;
-  searching: boolean;
+  options: { caseSensitive: boolean; wholeWord: boolean; isRegex: boolean };
+  hasDocument: boolean;
+  findIndex: number;
+  findTotal: number;
   onQueryChange: (value: string) => void;
   onToggleOption: (key: 'caseSensitive' | 'wholeWord' | 'isRegex') => void;
-  onSearch: (query: string) => void;
-  onSelectMatch: (match: SearchMatch) => void;
+  onStep: (direction: 'next' | 'previous') => void;
 }
 
 export function SearchReplaceView({
   query,
   options,
-  results,
-  searching,
+  hasDocument,
+  findIndex,
+  findTotal,
   onQueryChange,
   onToggleOption,
-  onSearch,
-  onSelectMatch
+  onStep
 }: SearchReplaceViewProps) {
-  const cancelPendingSearch = useRef<(() => void) | null>(null);
+  const trimmed = query.trim();
+  // Pre-check only to surface a readable error (invalid or risky regex).
+  const error = trimmed ? findInText('', { query, ...options }).error : undefined;
 
-  useEffect(() => {
-    const cancel = scheduleLiveSearch(query, onSearch);
-    cancelPendingSearch.current = cancel;
-    return () => {
-      cancel();
-      if (cancelPendingSearch.current === cancel) cancelPendingSearch.current = null;
-    };
-  }, [query, options.caseSensitive, options.wholeWord, options.isRegex, onSearch]);
+  let summary: string;
+  if (!hasDocument) summary = '请先打开一个章节，再在当前文件中查找。';
+  else if (!trimmed) summary = '输入关键词，在当前章节中查找。';
+  else if (error) summary = error;
+  else if (findTotal === 0) summary = '当前文件中没有匹配结果。';
+  else summary = `第 ${findIndex >= 0 ? findIndex + 1 : 0} / 共 ${findTotal} 处`;
 
-  const refresh = () => {
-    cancelPendingSearch.current?.();
-    onSearch(query);
-  };
+  const canStep = hasDocument && !error && findTotal > 0;
 
   return (
     <div class="workbench-search-view">
-      <div class="workbench-search-toolbar">
-        <button type="button" class="workbench-icon-button" onClick={refresh} disabled={!query.trim() || searching} title="刷新搜索结果">↻</button>
+      <div class="workbench-search-scopes" role="radiogroup" aria-label="查找范围">
+        <button type="button" role="radio" aria-checked="true" class="workbench-scope is-active">当前文件</button>
+        <button type="button" role="radio" aria-checked="false" class="workbench-scope" disabled title="实验包范围暂未开放">当前实验包</button>
+        <button type="button" role="radio" aria-checked="false" class="workbench-scope" disabled title="学习区范围暂未开放">当前学习区</button>
       </div>
       <form
         class="workbench-search-form"
         onSubmit={(event) => {
           event.preventDefault();
-          refresh();
+          if (canStep) onStep('next');
         }}
       >
         <div class="workbench-search-input-row">
           <input
             value={query}
-            placeholder="搜索"
-            aria-label="搜索文本"
+            placeholder="在当前文件中查找"
+            aria-label="查找文本"
+            disabled={!hasDocument}
             onInput={(event) => onQueryChange(event.currentTarget.value)}
           />
           <button type="button" class="workbench-input-toggle" aria-pressed={options.caseSensitive} onClick={() => onToggleOption('caseSensitive')} title="区分大小写">Aa</button>
@@ -63,40 +61,15 @@ export function SearchReplaceView({
           <button type="button" class="workbench-input-toggle" aria-pressed={options.isRegex} onClick={() => onToggleOption('isRegex')} title="使用正则表达式">.*</button>
         </div>
         <div class="workbench-replace-row" title="替换需要受控文件写入接口，当前尚未开放">
-          <input value="" placeholder="替换（尚未接入）" aria-label="替换文本" disabled />
-          <button type="button" class="workbench-input-toggle" disabled title="保留大小写">AB</button>
-          <button type="button" class="workbench-input-toggle" disabled title="全部替换">⇆</button>
+          <input value="" placeholder="替换（尚未开放）" aria-label="替换文本" disabled />
         </div>
       </form>
-      <div class="workbench-search-summary">
-        {searching
-          ? '正在搜索当前学习区…'
-          : results
-            ? results.error ?? `找到 ${results.totalMatches} 处结果，已搜索 ${results.searchedPackages} 个实验包`
-            : '输入关键词后搜索当前学习区'}
-      </div>
-      {results?.warnings.map((warning, index) => (
-        <p class="workbench-sidebar-warning" key={`${warning}-${index}`}>{warning}</p>
-      ))}
-      {results && !results.error && results.matches.length === 0 && (
-        <p class="workbench-empty-copy">没有匹配结果。</p>
-      )}
-      <div class="workbench-search-results">
-        {results?.matches.map((match, index) => (
-          <button
-            type="button"
-            class="workbench-search-result"
-            key={`${match.packageId}:${match.chapterId}:${match.line}:${match.column}:${index}`}
-            onClick={() => onSelectMatch(match)}
-          >
-            <span class="workbench-search-result-title">
-              <strong>{match.chapterTitle}</strong>
-              <small>{match.packageName}</small>
-            </span>
-            <span class="workbench-search-result-preview">{match.preview}</span>
-            <small>第 {match.line} 行，第 {match.column} 列</small>
-          </button>
-        ))}
+      <div class="workbench-find-nav">
+        <span class={`workbench-search-summary${error ? ' is-error' : ''}`}>{summary}</span>
+        <span class="workbench-find-buttons">
+          <button type="button" class="workbench-text-button" disabled={!canStep} onClick={() => onStep('previous')} title="上一个匹配">上一个</button>
+          <button type="button" class="workbench-text-button" disabled={!canStep} onClick={() => onStep('next')} title="下一个匹配">下一个</button>
+        </span>
       </div>
     </div>
   );

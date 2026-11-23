@@ -20,6 +20,12 @@ context types, and a pure-logic permission resolver.
 It does not yet load or execute plugin code. The context types and permission
 resolver are not runtime authorization mechanisms and are not a stable SDK.
 
+Planned settings UI (`not-available`): when a plugin registers settings, the
+settings window's left category list should display that plugin's name and
+open its settings. Categories use text labels without dedicated core icons.
+This is a confirmed display requirement; no settings registration API or
+manifest field is introduced by this design decision.
+
 ## Stability labels
 
 This document distinguishes three kinds of API:
