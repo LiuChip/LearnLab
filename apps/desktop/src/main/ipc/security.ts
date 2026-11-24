@@ -91,3 +91,7 @@ export function requireIdentifier(value: unknown, name: string): string {
   if (identifier === '.' || identifier === '..' || identifier.includes('/') || identifier.includes('\\')) throw new TypeError(`${name} must be a safe identifier`);
   return identifier;
 }
+
+export function getTrustedPackageDirs(sender: WebContents): Set<string> {
+  return new Set(getTrustState(sender).packages);
+}

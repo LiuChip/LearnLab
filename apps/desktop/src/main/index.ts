@@ -7,6 +7,7 @@ import { registerDatabaseIpc } from './ipc/database.ipc';
 import { registerConfigIpc } from './ipc/config.ipc';
 import { registerPackageIpc } from './ipc/package.ipc';
 import { registerPluginIpc } from './ipc/plugin.ipc';
+import { registerExecutionIpc } from './ipc/execution.ipc';
 import { DesktopDatabaseService } from './services/database';
 import {
   assertPackageInsideTrustedWorkspace,
@@ -110,6 +111,7 @@ if (!gotSingleInstanceLock) {
     registerConfigIpc();
     registerPackageIpc();
     registerPluginIpc();
+    registerExecutionIpc();
 
     ensureMainWindow();
     app.on('activate', () => ensureMainWindow());

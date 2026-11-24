@@ -183,6 +183,18 @@ list(): Promise<PluginManifest[]>
 resolveForPackage(packageDir: string): Promise<PluginResolution>
 ```
 
+### `execution`
+
+```ts
+start(plan: ExecutionPlan): Promise<Result<{ executionId: string }, ExecutionPlanError>>
+cancel(executionId: string): Promise<void>
+isRunning(executionId: string): Promise<boolean>
+onOutput(callback: (event, data: ExecutionOutputEvent) => void): () => void
+onComplete(callback: (event, data: ExecutionCompleteEvent) => void): () => void
+```
+
+`ExecutionPlan` 必填字段：`executionId`（无路径分隔符）、`labId`、`chapterId`、`pluginId`、`packageDir`（必须已被当前窗口加载过的受信包）、`experimentType`。可选字段：`input`、`timeoutMs`（最大 300 000 ms，默认 30 000 ms）。主进程以 `validateExecutionPlan` 校验后启动子进程；`ExecutionPlanError.type` 为 `invalid_plan`/`plugin_not_found`/`plugin_missing_entrypoint`/`package_not_trusted`/`execution_already_running` 之一。`onOutput`/`onComplete` 返回注销函数，须在组件卸载时调用。这些接口是 `renderer-host` 层，不是插件 SDK。
+
 `plugins` 只读取 manifest、注册表和解析结果，不启动插件进程；`database`、
 `config`、`dependencies` 以及返回绝对路径的接口不得直接交给不受信任插件。
 参数形状不合法或路径未被当前窗口信任时，IPC 可能抛出异常；业务失败通常
@@ -202,6 +214,7 @@ channel 名称。每个 handler 会验证 renderer、主 frame，并按 `WebCont
 | config     | `config:read`, `config:write`, `config:export-json`, `config:import-json`, `config:backup-instructions`                                                                  |
 | dependency | `dependency:import-bundled`, `dependency:list`, `dependency:prerequisites`                                                                                               |
 | plugin     | `plugin:list`, `plugin:resolve-for-package`                                                                                                                              |
+| execution  | `execution:start`, `execution:cancel`, `execution:is-running`; push: `execution:output`, `execution:complete`                                                            |
 
 窗口启用 `nodeIntegration: false`、`contextIsolation: true`、`sandbox: true` 和
 `webSecurity: true`，拒绝未授权导航和窗口打开。单实例锁及重复启动时聚焦已有
@@ -378,6 +391,7 @@ capability ID、授权弹窗/撤销/持久化、运行时 context 注入、`regi
 
 | 日期       | 变更                                                                                                                                         |
 | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| 2026-11-23 | 新增 `database.getWorkspaceSetting`/`setWorkspaceSetting`（`workspace_settings` 读写，用于最小阅读会话恢复）；`ExperimentHistory` 组件完成实验历史读取 UI（筛选/展开/损坏记录处理）；`ExperimentView` 增加"实验说明/执行历史"标签页；`database` IPC 新增两个 channel。 |
+| 2026-11-24 | 新增 `execution` 接口：`start`/`cancel`/`isRunning`/`onOutput`/`onComplete`；新增 `ExecutionPlan`、`ExecutionPlanError`、`ExecutionOutputEvent`、`ExecutionCompleteEvent` 类型（`packages/core-types/src/execution.ts`）；新增 `validateExecutionPlan`、`resolvePluginEntrypoint`、`buildPluginEnv`（`packages/core/src/execution-supervisor.ts`）；`PluginHostService` 子进程管理（`apps/desktop/src/main/services/plugin-host.ts`）；execution IPC 三个 channel；`ExperimentMarker` 增加 `experimentType` 可选字段。 |
+| 2026-11-23 | 新增 `database.getWorkspaceSetting`/`setWorkspaceSetting`；`ExperimentHistory` 组件完成实验历史读取 UI；`ExperimentView` 增加"实验说明/执行历史"标签页；`database` IPC 新增两个 channel。 |
 | 2026-09-15 | 登记正式 renderer 的 Workbench、通知计时、目录聚合和学习区搜索内部接口；记录新持久数据库默认便携格式及已有 SQLite 的兼容行为。               |
 | 2026-09-15 | 首次全仓扫描；登记 renderer bridge、内部 IPC、workspace 包导出、manifest/存储格式和未开放能力；修正 preload 配置 API 的 `unknown` 类型漂移。 |

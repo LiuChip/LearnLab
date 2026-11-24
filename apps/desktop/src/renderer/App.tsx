@@ -362,7 +362,13 @@ export function App() {
 
   const activeTab = editorTabs.tabs.find((tab) => tab.id === editorTabs.activeTabId);
   const editor = activeTab?.kind === 'experiment' ? (
-    <ExperimentView experiment={activeTab.experiment} readonlyStatus={store.readonlyStatus} packageDir={store.packageDir || ''} />
+    <ExperimentView
+      experiment={activeTab.experiment}
+      readonlyStatus={store.readonlyStatus}
+      packageDir={store.packageDir || ''}
+      activePlugins={store.activePlugins}
+      chapterId={activeTab.chapterId}
+    />
   ) : editorTabs.activeTabId ? (
     <ChapterReader
       documentKey={editorTabs.activeTabId}

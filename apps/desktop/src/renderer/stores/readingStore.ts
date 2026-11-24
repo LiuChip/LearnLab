@@ -6,6 +6,7 @@ import {
   type ExperimentParseResult,
   type MarkdownResult
 } from '@learnlab/markdown';
+import type { PluginManifest } from '@learnlab/core-types';
 
 const NO_EXPERIMENTS: ExperimentParseResult = { experiments: [], errors: [] };
 import {
@@ -42,6 +43,7 @@ export function useReadingStore() {
     missingPlugins: []
   });
   const [loadedPluginCount, setLoadedPluginCount] = useState(0);
+  const [activePlugins, setActivePlugins] = useState<PluginManifest[]>([]);
 
   // Search state
   const [searchQuery, setSearchQueryState] = useState<string>('');
@@ -95,6 +97,7 @@ export function useReadingStore() {
       setContentHash(null);
       setReadonlyStatus(EMPTY_PLUGIN_STATUS);
       setLoadedPluginCount(0);
+      setActivePlugins([]);
       setCopyStatus(null);
       setFindIndex(-1);
       setFindTotal(0);
@@ -116,6 +119,7 @@ export function useReadingStore() {
           const resolution = await window.learnlab.plugins.resolveForPackage(dir);
           if (packageRequestRef.current !== requestId || activePackageDirRef.current !== dir) return;
           setLoadedPluginCount(resolution.active.length);
+          setActivePlugins(resolution.active);
           setReadonlyStatus(evaluatePluginResolutionStatus(resolution));
         } catch (cause) {
           if (packageRequestRef.current !== requestId || activePackageDirRef.current !== dir) return;
@@ -389,6 +393,7 @@ export function useReadingStore() {
     error,
     readonlyStatus,
     loadedPluginCount,
+    activePlugins,
     searchQuery,
     setSearchQuery,
     searchOptions,

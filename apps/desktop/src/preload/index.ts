@@ -21,7 +21,11 @@ import type {
   AppConfig,
   Result,
   PluginManifest,
-  PluginResolution
+  PluginResolution,
+  ExecutionPlan,
+  ExecutionPlanError,
+  ExecutionOutputEvent,
+  ExecutionCompleteEvent
 } from '@learnlab/core-types';
 
 type ReadChapterPayload = { content: string; contentHash: string };
@@ -98,6 +102,22 @@ const api = {
     list: (): Promise<PluginManifest[]> => ipcRenderer.invoke('plugin:list'),
     resolveForPackage: (packageDir: string): Promise<PluginResolution> =>
       ipcRenderer.invoke('plugin:resolve-for-package', packageDir)
+  },
+  execution: {
+    start: (plan: ExecutionPlan): Promise<Result<{ executionId: string }, ExecutionPlanError>> =>
+      ipcRenderer.invoke('execution:start', plan),
+    cancel: (executionId: string): Promise<void> =>
+      ipcRenderer.invoke('execution:cancel', executionId),
+    isRunning: (executionId: string): Promise<boolean> =>
+      ipcRenderer.invoke('execution:is-running', executionId),
+    onOutput: (callback: (event: Electron.IpcRendererEvent, data: ExecutionOutputEvent) => void) => {
+      ipcRenderer.on('execution:output', callback as Parameters<typeof ipcRenderer.on>[1]);
+      return () => ipcRenderer.removeListener('execution:output', callback as Parameters<typeof ipcRenderer.on>[1]);
+    },
+    onComplete: (callback: (event: Electron.IpcRendererEvent, data: ExecutionCompleteEvent) => void) => {
+      ipcRenderer.on('execution:complete', callback as Parameters<typeof ipcRenderer.on>[1]);
+      return () => ipcRenderer.removeListener('execution:complete', callback as Parameters<typeof ipcRenderer.on>[1]);
+    }
   }
 };
 

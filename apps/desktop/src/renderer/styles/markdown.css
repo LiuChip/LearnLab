@@ -231,3 +231,45 @@
   color: var(--workbench-muted);
   font-size: 11px;
 }
+
+.experiment-output {
+  margin-top: 16px;
+}
+
+.experiment-output h3 {
+  margin: 0 0 8px;
+  font-size: 14px;
+}
+
+.experiment-output pre {
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 6px;
+  padding: 12px;
+  overflow: auto;
+  max-height: 300px;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.experiment-run-status {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.run-status-running { color: #f59e0b; }
+.run-status-passed { color: #22c55e; }
+.run-status-failed { color: #ef4444; }
+.run-status-cancelled { color: var(--workbench-muted); }
+.run-status-timeout { color: #ef4444; }
+
+.run-status-reason {
+  font-weight: 400;
+  color: var(--workbench-muted);
+}
+
+.experiment-run-hint {
+  display: block;
+  color: var(--workbench-muted);
+  font-size: 12px;
+  margin-top: 8px;
+}

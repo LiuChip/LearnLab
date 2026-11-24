@@ -7,3 +7,4 @@ export * from './adapter';
 export * from './workspace';
 export * from './dependency';
 export * from './context';
+export * from './execution';

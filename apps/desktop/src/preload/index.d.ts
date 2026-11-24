@@ -20,7 +20,11 @@ import type {
   WorkspacePrerequisiteRecord,
   AppConfig,
   PluginManifest,
-  PluginResolution
+  PluginResolution,
+  ExecutionPlan,
+  ExecutionPlanError,
+  ExecutionOutputEvent,
+  ExecutionCompleteEvent
 } from '@learnlab/core-types';
 
 type ReadChapterPayload = { content: string; contentHash: string };
@@ -74,6 +78,13 @@ export interface LearnLabAPI {
   plugins: {
     list: () => Promise<PluginManifest[]>;
     resolveForPackage: (packageDir: string) => Promise<PluginResolution>;
+  };
+  execution: {
+    start: (plan: ExecutionPlan) => Promise<Result<{ executionId: string }, ExecutionPlanError>>;
+    cancel: (executionId: string) => Promise<void>;
+    isRunning: (executionId: string) => Promise<boolean>;
+    onOutput: (callback: (event: Electron.IpcRendererEvent, data: ExecutionOutputEvent) => void) => () => void;
+    onComplete: (callback: (event: Electron.IpcRendererEvent, data: ExecutionCompleteEvent) => void) => () => void;
   };
 }
 

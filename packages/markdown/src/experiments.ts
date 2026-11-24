@@ -12,6 +12,8 @@ export interface ExperimentMarker {
   id: string;
   title: string;
   type: 'auto' | 'manual';
+  /** Plugin experiment type, e.g. "query", "io-match". Required for auto-judged experiments. */
+  experimentType?: string;
   instruction: string;
   hints: ExperimentHint[];
   line: number;
@@ -41,6 +43,9 @@ function toMarker(raw: unknown, line: number): ExperimentMarker | string {
   const type = raw.type === undefined ? 'manual' : raw.type;
   if (type !== 'auto' && type !== 'manual') return `实验 ${id} 的 type 只能是 auto 或 manual`;
   const instruction = typeof raw.instruction === 'string' ? raw.instruction.trim() : '';
+  const experimentType = typeof raw.experiment_type === 'string' && raw.experiment_type.trim()
+    ? raw.experiment_type.trim()
+    : undefined;
   const hints: ExperimentHint[] = [];
   if (raw.hints !== undefined) {
     if (!Array.isArray(raw.hints)) return `实验 ${id} 的 hints 必须是列表`;
@@ -51,7 +56,7 @@ function toMarker(raw: unknown, line: number): ExperimentMarker | string {
       }
     });
   }
-  return { id, title, type, instruction, hints, line };
+  return { id, title, type, experimentType, instruction, hints, line };
 }
 
 export function parseExperimentMarkers(markdown: string): ExperimentParseResult {
