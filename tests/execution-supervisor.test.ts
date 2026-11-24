@@ -26,7 +26,9 @@ describe('validateExecutionPlan', () => {
   });
 
   it('rejects a plan with missing required fields', () => {
-    const { labId: _, ...missing } = basePlan;
+    const missing = Object.fromEntries(
+      Object.entries(basePlan).filter(([key]) => key !== 'labId')
+    );
     const result = validateExecutionPlan(missing, trusted);
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error.type).toBe('invalid_plan');
