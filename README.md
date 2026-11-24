@@ -1,5 +1,7 @@
 # LearnLab
 
+[![CI](https://github.com/LiuChip/LearnLab/actions/workflows/ci.yml/badge.svg)](https://github.com/LiuChip/LearnLab/actions/workflows/ci.yml)
+
 **本地交互式实验浏览器，处于早期开发阶段。** LearnLab 希望把教程、练习和反馈组织成可分享的实验包：学习者在同一桌面工作台阅读内容、动手实验，作者用独立的工具和插件提供内容与环境。
 
 > 截至 2026-10-01：桌面工作台、目录型实验包阅读、阅读进度、插件依赖解析、学习区内包导入（先复制再登记）和当前文件查找已有实现；实验运行、插件代码宿主、包归档导入和下载源尚未开放。仓库中的示例实验包是开发 fixture，不是已发布课程。
