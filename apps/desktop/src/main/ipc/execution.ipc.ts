@@ -4,7 +4,7 @@ import {
   resolvePluginEntrypoint,
   recordExperimentAttempt
 } from '@learnlab/core';
-import type { ExecutionCompleteEvent, ExecutionPlanError } from '@learnlab/core-types';
+import type { ExecutionCompleteEvent, ExecutionPlan, ExecutionPlanError } from '@learnlab/core-types';
 import type { Result } from '@learnlab/core-types';
 import { getDefaultPluginsDir } from '../services/paths';
 import { getPluginHostService, type PluginHostEvent } from '../services/plugin-host';
@@ -39,7 +39,7 @@ export function registerExecutionIpc(): void {
       ownerMap.delete(executionId);
 
       // Auto-record history on completion
-      void recordCompletionToHistory(event.data);
+      void recordCompletionToHistory(event.data, event.plan);
     }
   });
 
@@ -86,9 +86,24 @@ export function registerExecutionIpc(): void {
   });
 }
 
-async function recordCompletionToHistory(event: ExecutionCompleteEvent): Promise<void> {
-  // We don't have packageDir here directly — it was stored in the plan.
-  // The host needs to expose it. For now we skip auto-recording if we can't resolve it.
-  // This is wired fully in a follow-up once host exposes getPlan(executionId).
-  void event;
+async function recordCompletionToHistory(event: ExecutionCompleteEvent, plan: ExecutionPlan): Promise<void> {
+  try {
+    const db = DesktopDatabaseService.getPackageDb(plan.packageDir);
+    await recordExperimentAttempt({
+      packageDir: plan.packageDir,
+      attempt: {
+        attemptId: event.executionId,
+        labId: plan.labId,
+        chapterId: plan.chapterId,
+        status: event.status === 'passed' ? 'passed' : 'failed',
+        timestamp: new Date().toISOString(),
+        durationMs: event.durationMs,
+        steps: event.steps,
+        error: event.reason
+      },
+      db
+    });
+  } catch {
+    // History write failures must never crash the main process
+  }
 }

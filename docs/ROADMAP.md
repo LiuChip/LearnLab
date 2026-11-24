@@ -34,7 +34,7 @@
 [已于 2026-11-23 完成：实验历史读取 UI] 1. 接入 `experiment_history/` 的读取 UI：本实验”查看全部 / 只看成功 / 只看失败”文字筛选、失败详情展开、空结果和损坏单条记录处理。手动失败固定记录”用户判定实验失败”；自动失败忠实显示判定器返回的理由与分项结果。阅读百分比始终只计章节。
 [已于 2026-11-23 完成：路径确认；workspace_settings 读写 IPC 已实现] 2. 明确存储兼容：当前代码把 `<workspace>/workspace.db`、`<package>/package.db` 与 `<package>/experiment_history/` 放在目录根部；路径已确认为规范路径，不迁移。`workspace_settings` 表新增 `last_package_id`/`last_chapter_id` 用于最小阅读会话恢复。
 [已于 2026-11-24 完成：ExecutionPlan/Result 类型、ExecutionSupervisor 验证、PluginHostService 子进程管理、execution IPC 三个 channel、preload bridge、ExperimentView 运行/取消 UI] 3. 插件宿主执行模型
-4. 实验历史记录
+[已于 2026-11-24 完成：ExecutionCompleteEvent 附带 ExecutionPlan，ipc handler 自动调用 recordExperimentAttempt 写入 experiment_history/] 4. 实验历史记录
 
 **退出标准**：目录型 fixture 的实验标签在缺失插件时仍能阅读且不能执行；预置历史记录按当前实验筛选、展开，失败来源正确；章节进度不被实验结果改变。主要位置：`packages/core/src/experiment-history.ts`、`apps/desktop/src/renderer/components/content/`、`apps/desktop/src/renderer/stores/tabStore.ts` 和端到端 fixture。
 

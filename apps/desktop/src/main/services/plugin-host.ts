@@ -18,7 +18,7 @@ interface ActiveExecution {
 
 export type PluginHostEvent =
   | { type: 'output'; data: ExecutionOutputEvent }
-  | { type: 'complete'; data: ExecutionCompleteEvent };
+  | { type: 'complete'; data: ExecutionCompleteEvent; plan: ExecutionPlan };
 
 /**
  * Manages plugin child processes for experiment execution.
@@ -164,7 +164,7 @@ export class PluginHostService extends EventEmitter {
       reason: reason ?? (status === 'timeout' ? `超时（${execution.plan.timeoutMs ?? 30_000} ms）` : undefined)
     };
 
-    this.emit('event', { type: 'complete', data: complete } satisfies PluginHostEvent);
+    this.emit('event', { type: 'complete', data: complete, plan: execution.plan } satisfies PluginHostEvent);
   }
 }
 

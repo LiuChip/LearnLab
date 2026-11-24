@@ -19,7 +19,7 @@
 | 搜索       | 当前文件查找（定位、高亮、上/下跳转，纯函数位于 `packages/markdown/src/find.ts`）；核心遍历式学习区搜索保留为内部能力 | 包/学习区范围暂不可选；替换写入未开放 |
 | 插件与环境 | manifest/注册表/依赖解析、实验性上下文和纯逻辑权限求交；依赖安全导入与记录；ExecutionPlan 类型与验证、PluginHostService 子进程管理、execution:start/cancel/is-running IPC、preload bridge、ExperimentView 运行/取消 UI | 真正的插件代码宿主授权弹窗、运行时授权持久化、MySQL 插件与判定器、实验历史自动写入 |
 | 数据与工具 | 配置 JSON 导入导出、阅读进度、实验历史存储模块、数据库迁移；LabKit 校验/预览模块；实验历史读取 UI（筛选/展开/损坏记录处理）；`workspace_settings` 读写 IPC | LabKit CLI/pack、`.labpkg` 归档导入、仓库下载器；实验历史写入（依赖 M3 插件宿主） |
-| 质量       | 当前工作树 `pnpm test:run`：30 个文件、154 项测试；`typecheck`、`lint`、`build` 通过    | Electron 安装包、真实实验端到端、跨平台进程回收与视觉验收               |
+| 质量       | 当前工作树 `pnpm test:run`：31 个文件、158 项测试；`typecheck`、`lint`、`build` 通过    | Electron 安装包、真实实验端到端、跨平台进程回收与视觉验收               |
 
 `workspace.db`/`package.db` 是逻辑名称。新建持久文件目前默认使用便携 JSON driver；已有 SQLite 文件仅在运行时支持 `node:sqlite` 时打开。详见[数据模型](DATA_MODEL.md)。
 
