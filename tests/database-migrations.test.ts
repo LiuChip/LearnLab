@@ -201,10 +201,8 @@ describe('database migrations and database abstractions', () => {
 it('rejects databases created by a newer schema version', () => {
   const db = createDatabaseConnection(':memory:');
   try {
-    db.exec(`
-      CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL);
-      INSERT INTO schema_migrations (version, applied_at) VALUES (99, 'future');
-    `);
+    db.exec('CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL);');
+    db.prepare('INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)').run(99, 'future');
 
     expect(() => runMigrations(db, [{
       version: 1,
@@ -255,7 +253,10 @@ it('rolls back a failed migration', () => {
       conn.exec('CREATE TABLE should_rollback (id TEXT PRIMARY KEY)');
       throw new Error('boom');
     }}])).toThrow('boom');
-    expect(db.prepare("SELECT name FROM sqlite_master WHERE name = 'should_rollback'").get()).toBeUndefined();
+    // On both SQLite and Portable, querying a non-existent table raises an error.
+    // This works with both engines: Portable throws "Table X does not exist",
+    // SQLite throws "no such table".
+    expect(() => db.prepare('SELECT id FROM should_rollback').all()).toThrow(/should_rollback/);
   } finally {
     db.close();
   }
