@@ -1,5 +1,6 @@
-import { existsSync } from 'node:fs';
+import { lstat, stat } from 'node:fs/promises';
 import * as path from 'node:path';
+import { resolveSafeExistingPath } from './package-paths';
 import type {
   ExecutionPlan,
   ExecutionPlanError
@@ -63,26 +64,22 @@ export function validateExecutionPlan(
  * Locates the runnable entry point for a plugin.
  * Returns the absolute path to the plugin's runtime entry if found.
  */
-export function resolvePluginEntrypoint(
+export async function resolvePluginEntrypoint(
   pluginsDir: string,
-  pluginId: string
-): Result<string, ExecutionPlanError> {
-  if (!pluginId || pluginId.includes('/') || pluginId.includes('\\') || pluginId.includes('\0')) {
-    return { ok: false, error: { type: 'plugin_not_found', message: `插件 ID 不合法：${pluginId}` } };
+  directoryName: string
+): Promise<Result<string, ExecutionPlanError>> {
+  if (!directoryName || directoryName === '.' || directoryName === '..' ||
+      /[/\\\0:]/.test(directoryName)) {
+    return { ok: false, error: { type: 'plugin_not_found', message: '插件安装目录不合法。' } };
   }
 
-  const pluginDir = path.join(path.resolve(pluginsDir), pluginId);
-  // Convention: plugins/plugin-mysql/runtime/index.js (built artifact)
-  // Falls back to src/index.js for development plugins
-  const candidates = [
-    path.join(pluginDir, 'runtime', 'index.js'),
-    path.join(pluginDir, 'dist', 'index.js'),
-    path.join(pluginDir, 'src', 'index.js')
-  ];
-
-  for (const candidate of candidates) {
-    if (existsSync(candidate)) {
-      return { ok: true, value: candidate };
+  const pluginDir = path.join(path.resolve(pluginsDir), directoryName);
+  if ((await lstat(pluginDir).catch(() => null))?.isDirectory()) {
+    for (const candidate of ['runtime/index.js', 'dist/index.js', 'src/index.js']) {
+      const entry = await resolveSafeExistingPath(pluginDir, candidate, pluginsDir);
+      if (entry && (await stat(entry).catch(() => null))?.isFile()) {
+        return { ok: true, value: entry };
+      }
     }
   }
 
@@ -90,7 +87,7 @@ export function resolvePluginEntrypoint(
     ok: false,
     error: {
       type: 'plugin_missing_entrypoint',
-      message: `插件 ${pluginId} 没有可执行的入口文件（已检查 runtime/dist/src 目录）`
+      message: '插件没有可执行的入口文件（已检查 runtime、dist 和 src 目录）。'
     }
   };
 }

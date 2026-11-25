@@ -88,6 +88,13 @@ export function ExperimentView({
         timeoutMs: 30_000
       });
       if (result.ok) return;
+      if (result.error.type === 'execution_cancelled') {
+        if (executionIdRef.current === executionId) {
+          executionIdRef.current = null;
+          setRunStatus('idle');
+        }
+        return;
+      }
       error = result.error.message;
     } catch {
       error = '无法启动实验，请稍后重试。';

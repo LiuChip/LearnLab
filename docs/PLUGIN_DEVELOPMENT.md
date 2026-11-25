@@ -18,6 +18,10 @@ registry, dependency resolution, renderer host queries, minimal experimental
 context types, and a pure-logic permission resolver.
 
 The desktop has an internal child-process execution path for local fixtures.
+Before launch, it checks the chapter's automatic experiment declaration against
+the selected plugin's `provides` field. It resolves the plugin again using current
+settings and uses the installation directory of the selected compatible version.
+Duplicate installations of the same plugin ID and selected version block launch.
 Runtime authorization and the official plugin implementations are pending.
 The context types and permission resolver remain experimental.
 

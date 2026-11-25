@@ -1,7 +1,6 @@
 import { BrowserWindow, dialog, ipcMain, type WebContents } from 'electron';
 import {
   validateExecutionPlan,
-  resolvePluginEntrypoint,
   recordExperimentAttempt
 } from '@learnlab/core';
 import type {
@@ -11,10 +10,11 @@ import type {
   ExperimentCloseResult
 } from '@learnlab/core-types';
 import type { Result } from '@learnlab/core-types';
-import { getDefaultPluginsDir } from '../services/paths';
+import { prepareExperimentLaunch } from '../services/experiment-launch';
 import { getPluginHostService, type PluginHostEvent } from '../services/plugin-host';
 import { DesktopDatabaseService } from '../services/database';
 import {
+  assertPackageInsideTrustedWorkspace,
   assertTrustedPackage,
   assertTrustedRenderer,
   getTrustedPackageDirs,
@@ -42,6 +42,7 @@ export function registerExecutionIpc(): void {
   // Forward host events to the renderer that started the execution
   // We track which renderer owns which executionId so we route correctly.
   const ownerMap = new Map<string, { sender: WebContents; plan: ExecutionPlan }>();
+  const preparing = new Map<string, { sender: WebContents; plan: ExecutionPlan }>();
   const pendingCloses = new Set<CloseScope>();
 
   host.on('event', (event: PluginHostEvent) => {
@@ -69,41 +70,57 @@ export function registerExecutionIpc(): void {
       if (!validation.ok) return validation;
 
       const plan = validation.value;
+      const isClosing = () => [...pendingCloses].some((scope) =>
+        matchesScope(scope, ipcEvent.sender, plan)
+      );
 
       // Re-validate the package dir via the standard trusted-package check
       assertTrustedPackage(ipcEvent.sender, plan.packageDir);
 
-      if ([...pendingCloses].some((scope) => matchesScope(scope, ipcEvent.sender, plan))) {
+      if (isClosing()) {
         return { ok: false, error: { type: 'execution_already_running', message: '正在处理实验标签关闭' } };
       }
 
       const activeScope = { sender: ipcEvent.sender, packageDir: plan.packageDir, labId: plan.labId };
-      if (host.isRunning(plan.executionId) || [...ownerMap.values()].some(
+      const existing = [...ownerMap.values(), ...preparing.values()].some(
         (owner) => matchesScope(activeScope, owner.sender, owner.plan)
-      )) {
+      );
+      if (host.isRunning(plan.executionId) || preparing.has(plan.executionId) || existing) {
         return {
           ok: false,
           error: { type: 'execution_already_running', message: '实验已有执行正在运行或退出' }
         };
       }
 
-      const entrypoint = resolvePluginEntrypoint(getDefaultPluginsDir(), plan.pluginId);
-      if (!entrypoint.ok) return entrypoint;
-
-      ownerMap.set(plan.executionId, { sender: ipcEvent.sender, plan });
+      const request = { sender: ipcEvent.sender, plan };
+      preparing.set(plan.executionId, request);
       try {
-        host.start(plan, entrypoint.value);
-      } catch (error) {
-        ownerMap.delete(plan.executionId);
-        throw error;
+        await assertPackageInsideTrustedWorkspace(request.sender, plan.packageDir);
+        const entrypoint = await prepareExperimentLaunch(plan);
+        if (preparing.get(plan.executionId) !== request || request.sender.isDestroyed() || isClosing()) {
+          return { ok: false, error: { type: 'execution_cancelled', message: '已取消启动实验。' } };
+        }
+        if (!entrypoint.ok) return entrypoint;
+
+        ownerMap.set(plan.executionId, request);
+        try {
+          host.start(plan, entrypoint.value);
+        } catch (error) {
+          ownerMap.delete(plan.executionId);
+          throw error;
+        }
+        return { ok: true, value: { executionId: plan.executionId } };
+      } finally {
+        if (preparing.get(plan.executionId) === request) preparing.delete(plan.executionId);
       }
-      return { ok: true, value: { executionId: plan.executionId } };
     }
   );
 
   ipcMain.handle('execution:cancel', async (ipcEvent, executionId: string) => {
     assertTrustedRenderer(ipcEvent);
-    if (typeof executionId !== 'string' || ownerMap.get(executionId)?.sender !== ipcEvent.sender) return;
+    if (typeof executionId !== 'string') return;
+    if (preparing.get(executionId)?.sender === ipcEvent.sender) preparing.delete(executionId);
+    if (ownerMap.get(executionId)?.sender !== ipcEvent.sender) return;
     if (!await host.cancel(executionId)) throw new Error('未能确认实验进程已退出，请重试。');
   });
 
@@ -126,9 +143,17 @@ export function registerExecutionIpc(): void {
     );
     if (alreadyClosing) return { status: 'cancelled' };
 
+    const cancelPreparation = () => {
+      for (const [id, request] of preparing) {
+        if (matchesScope(scope, request.sender, request.plan)) preparing.delete(id);
+      }
+    };
     const executions = [...ownerMap.entries()]
       .filter(([, owner]) => matchesScope(scope, owner.sender, owner.plan));
-    if (executions.length === 0) return { status: 'close' };
+    if (executions.length === 0) {
+      cancelPreparation();
+      return { status: 'close' };
+    }
 
     const window = BrowserWindow.fromWebContents(scope.sender);
     if (!window) return { status: 'cancelled' };
@@ -147,6 +172,7 @@ export function registerExecutionIpc(): void {
         noLink: true
       });
       if (response !== 0) return { status: 'cancelled' };
+      cancelPreparation();
 
       const stopped = await Promise.all(executions.map(([id, owner]) =>
         ownerMap.get(id) === owner ? host.cancel(id) : true

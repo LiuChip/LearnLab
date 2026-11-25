@@ -33,9 +33,11 @@ export interface ExecutionPlanError {
   type:
     | 'invalid_plan'
     | 'plugin_not_found'
+    | 'plugin_not_allowed'
     | 'plugin_missing_entrypoint'
     | 'package_not_trusted'
-    | 'execution_already_running';
+    | 'execution_already_running'
+    | 'execution_cancelled';
   message: string;
 }
 
