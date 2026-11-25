@@ -6,7 +6,8 @@ const mocks = vi.hoisted(() => ({
   handle: vi.fn(),
   showMessageBox: vi.fn(),
   host: { on: vi.fn(), start: vi.fn(), isRunning: vi.fn(), cancel: vi.fn() },
-  recordAttempt: vi.fn()
+  recordAttempt: vi.fn(),
+  prepare: vi.fn()
 }));
 
 vi.mock('../apps/desktop/node_modules/electron', () => ({
@@ -16,11 +17,14 @@ vi.mock('../apps/desktop/node_modules/electron', () => ({
 }));
 vi.mock('../apps/desktop/src/main/ipc/security', () => ({
   assertTrustedRenderer: vi.fn(),
+  assertPackageInsideTrustedWorkspace: vi.fn(),
   assertTrustedPackage: (_sender: unknown, dir: string) => dir,
   getTrustedPackageDirs: () => new Set(['/workspace/sql', '/workspace/other']),
   requireNonEmptyString: (id: string) => id
 }));
-vi.mock('../apps/desktop/src/main/services/paths', () => ({ getDefaultPluginsDir: () => '/plugins' }));
+vi.mock('../apps/desktop/src/main/services/experiment-launch', () => ({
+  prepareExperimentLaunch: mocks.prepare
+}));
 vi.mock('../apps/desktop/src/main/services/database', () => ({
   DesktopDatabaseService: { getPackageDb: vi.fn() }
 }));
@@ -29,7 +33,6 @@ vi.mock('../apps/desktop/src/main/services/plugin-host', () => ({
 }));
 vi.mock('../packages/core/src/index', async () => ({
   ...(await vi.importActual<typeof import('../packages/core/src/index')>('../packages/core/src/index')),
-  resolvePluginEntrypoint: () => ({ ok: true, value: '/plugins/test.js' }),
   recordExperimentAttempt: mocks.recordAttempt
 }));
 
@@ -60,6 +63,7 @@ const active = new Map<string, ExecutionPlan>();
 beforeEach(() => {
   vi.resetAllMocks();
   active.clear();
+  mocks.prepare.mockResolvedValue({ ok: true, value: '/plugins/test.js' });
   mocks.host.isRunning.mockImplementation((id) => active.has(id));
   mocks.host.start.mockImplementation((executionPlan: ExecutionPlan) => {
     active.set(executionPlan.executionId, executionPlan);
@@ -148,5 +152,26 @@ describe('experiment tab close IPC', () => {
     mocks.showMessageBox.mockResolvedValue({ response: 0 });
     expect(await invoke('execution:confirm-close', owner, packageDir)).toEqual({ status: 'close' });
     expect([...active.keys()]).toEqual(['other-package']);
+  });
+
+  it('blocks launches rejected by the main process before creating a child', async () => {
+    mocks.prepare.mockResolvedValue({ ok: false, error: { type: 'invalid_plan', message: '实验不匹配' } });
+    expect(await invoke('execution:start', createSender(), plan)).toMatchObject({ ok: false });
+    expect(mocks.host.start).not.toHaveBeenCalled();
+  });
+
+  it('cancels preparation when the matching experiment tab is closed', async () => {
+    const owner = createSender();
+    let prepared!: () => void;
+    mocks.prepare.mockReturnValue(new Promise((resolve) => {
+      prepared = () => resolve({ ok: true, value: '/plugins/test.js' });
+    }));
+    const start = invoke('execution:start', owner, plan);
+    expect(await invoke('execution:start', owner, { ...plan, executionId: 'concurrent' })).toMatchObject({ ok: false });
+    expect(await invoke('execution:confirm-close', owner, packageDir, plan.labId)).toEqual({ status: 'close' });
+    prepared();
+    expect(await start).toMatchObject({ ok: false, error: { type: 'execution_cancelled' } });
+    expect(mocks.showMessageBox).not.toHaveBeenCalled();
+    expect(mocks.host.start).not.toHaveBeenCalled();
   });
 });

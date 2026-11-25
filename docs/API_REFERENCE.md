@@ -196,7 +196,9 @@ onOutput(callback: (event, data: ExecutionOutputEvent) => void): () => void
 onComplete(callback: (event, data: ExecutionCompleteEvent) => void): () => void
 ```
 
-`ExecutionPlan` 必填字段：`executionId`（无路径分隔符）、`labId`、`chapterId`、`pluginId`、`packageDir`（必须已被当前窗口加载过的受信包）、`experimentType`。可选字段：`input`、`timeoutMs`（最大 300 000 ms，默认 30 000 ms）。主进程以 `validateExecutionPlan` 校验后启动子进程；`ExecutionPlanError.type` 为 `invalid_plan`/`plugin_not_found`/`plugin_missing_entrypoint`/`package_not_trusted`/`execution_already_running` 之一。`onOutput`/`onComplete` 返回注销函数，须在组件卸载时调用。这些接口是 `renderer-host` 层，不是插件 SDK。
+`ExecutionPlan` 的必填字段为 `executionId`（无路径分隔符）、`labId`、`chapterId`、`pluginId`、`packageDir` 和 `experimentType`。可选字段为 `input` 和 `timeoutMs`（最大 300 000 ms，默认 30 000 ms）。
+
+主进程检查当前窗口与学习区路径，读取章节中的自动实验声明，并依据当前插件设置与包的依赖约束解析活动插件。插件必须声明对应的实验类型。入口从解析所得版本的安装目录读取。同 ID 同版本的重复安装会被拒绝。启动资格检查失败可返回 `invalid_plan`、`package_not_trusted`、`plugin_not_allowed`、`plugin_not_found` 或 `plugin_missing_entrypoint`。运行冲突返回 `execution_already_running`，关闭期间撤销的启动返回 `execution_cancelled`。`onOutput` 和 `onComplete` 返回监听注销函数。
 
 `plugins` 只读取 manifest、注册表和解析结果，不启动插件进程；`database`、
 `config`、`dependencies` 以及返回绝对路径的接口不得直接交给不受信任插件。
@@ -272,6 +274,7 @@ context 只有只读的版本、workspace ID、名称和 package ID 类型，不
 - 加载：`LoadError`、`LoadedPackage`、`loadPackage`、`loadPackageManifest`、`readChapter`。
 - 插件：`PluginManifestError`、`parsePluginManifest`、`loadPluginManifest`、
   `resolvePlugins`、`satisfiesPluginVersion`。
+- `resolvePluginEntrypoint(pluginsDir, directoryName)` 异步检查已选安装目录的执行入口，返回真实文件路径或错误。
 - 依赖：`DependencyMetadata`、`dependencyFingerprint`、`getDependencyInstallPath`、
   `getWorkspacePaths`、`calculateBufferSha256`、`calculateFileSha256`、
   `calculateFileStats`、`importBundledDependency`。

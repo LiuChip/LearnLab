@@ -63,7 +63,7 @@ describe('resolvePluginEntrypoint', () => {
       const pluginDir = path.join(dir, 'plugin-test', 'runtime');
       await mkdir(pluginDir, { recursive: true });
       await writeFile(path.join(pluginDir, 'index.js'), '// stub');
-      const result = resolvePluginEntrypoint(dir, 'plugin-test');
+      const result = await resolvePluginEntrypoint(dir, 'plugin-test');
       expect(result.ok).toBe(true);
       if (result.ok) expect(result.value).toContain(path.join('plugin-test', 'runtime', 'index.js'));
     } finally {
@@ -74,7 +74,7 @@ describe('resolvePluginEntrypoint', () => {
   it('returns plugin_missing_entrypoint when no entry exists', async () => {
     const dir = await mkdtemp(path.join(tmpdir(), 'learnlab-plugin-'));
     try {
-      const result = resolvePluginEntrypoint(dir, 'plugin-nonexistent');
+      const result = await resolvePluginEntrypoint(dir, 'plugin-nonexistent');
       expect(result.ok).toBe(false);
       if (!result.ok) expect(result.error.type).toBe('plugin_missing_entrypoint');
     } finally {
@@ -82,8 +82,8 @@ describe('resolvePluginEntrypoint', () => {
     }
   });
 
-  it('rejects plugin_id with path separators', () => {
-    const result = resolvePluginEntrypoint('/plugins', '../escape');
+  it('rejects installation names with path separators', async () => {
+    const result = await resolvePluginEntrypoint('/plugins', '../escape');
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error.type).toBe('plugin_not_found');
   });
