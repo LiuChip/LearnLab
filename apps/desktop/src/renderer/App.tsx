@@ -74,6 +74,10 @@ export function App() {
   const [quickQuery, setQuickQuery] = useState('');
   const quickInputRef = useRef<HTMLInputElement>(null);
   const lastErrorRef = useRef('');
+  const editorTabsRef = useRef(editorTabs);
+  editorTabsRef.current = editorTabs;
+  const closingExperiments = useRef(false);
+  const canStartExperiment = useCallback(() => !closingExperiments.current, []);
 
   const notify = useCallback((input: NotificationInput) => {
     setWorkbench((state) => addNotification(state, input));
@@ -185,6 +189,8 @@ export function App() {
   }, [store.activeChapter?.id, selectedPackageId]);
 
   const selectedPackage = workspacePackages.find((item) => item.id === selectedPackageId);
+  const selectedPackageRef = useRef(selectedPackage);
+  selectedPackageRef.current = selectedPackage;
   const quickResults = store.chapters.filter((chapter) =>
     chapter.title.toLocaleLowerCase().includes(quickQuery.trim().toLocaleLowerCase())
   );
@@ -220,16 +226,38 @@ export function App() {
     }));
   }, [selectedPackageId, store.activeChapterId]);
 
-  const switchPackage = useCallback(async (item: RegisteredPackage, preferredChapterId?: string) => {
-    if (item.id === selectedPackageId && !preferredChapterId) return;
-    setSelectedPackageId(item.id);
-    setEditorTabs(createEditorTabsState());
-    await store.loadPackageByPath(item.path, preferredChapterId);
-    // Persist last-opened package so it can be restored on next launch.
-    if (workspaceDir) {
-      void window.learnlab.database.setWorkspaceSetting(workspaceDir, 'last_package_id', item.id).catch(() => undefined);
+  const confirmExperimentClose = useCallback(async (packageDir: string, labId?: string) => {
+    try {
+      const result = await window.learnlab.execution.confirmClose(packageDir, labId);
+      if (result.status === 'failed') {
+        notify({ level: 'error', title: '无法关闭实验标签', message: result.reason });
+      }
+      return result.status === 'close';
+    } catch {
+      notify({ level: 'error', title: '无法关闭实验标签', message: '未能确认实验进程已退出，请稍后重试。' });
+      return false;
     }
-  }, [selectedPackageId, store.loadPackageByPath, workspaceDir]);
+  }, [notify]);
+
+  const switchPackage = useCallback(async (item: RegisteredPackage, preferredChapterId?: string) => {
+    const currentPackage = selectedPackageRef.current;
+    if (item.id === currentPackage?.id && !preferredChapterId) return;
+    if (closingExperiments.current) return;
+    closingExperiments.current = true;
+    try {
+      const willCloseExperiments = editorTabsRef.current.tabs.some((tab) => tab.kind === 'experiment');
+      if (willCloseExperiments &&
+          (!currentPackage || !await confirmExperimentClose(currentPackage.path))) return;
+      setSelectedPackageId(item.id);
+      setEditorTabs(createEditorTabsState());
+      await store.loadPackageByPath(item.path, preferredChapterId);
+      if (workspaceDir) {
+        void window.learnlab.database.setWorkspaceSetting(workspaceDir, 'last_package_id', item.id).catch(() => undefined);
+      }
+    } finally {
+      closingExperiments.current = false;
+    }
+  }, [store.loadPackageByPath, workspaceDir, confirmExperimentClose]);
 
   const activateTab = useCallback((tabId: string) => {
     const tab = editorTabs.tabs.find((item) => item.id === tabId);
@@ -238,14 +266,34 @@ export function App() {
     if (tab.kind === 'chapter' && tab.packageId === selectedPackageId) void store.selectChapter(tab.chapterId);
   }, [editorTabs.tabs, selectedPackageId, store.selectChapter]);
 
-  const closeTab = useCallback((tabId: string) => {
-    const closingActiveTab = editorTabs.activeTabId === tabId;
-    const nextState = closeEditorTab(editorTabs, tabId);
-    setEditorTabs(nextState);
-    if (!closingActiveTab) return;
-    const nextTab = nextState.tabs.find((item) => item.id === nextState.activeTabId);
-    if (nextTab?.kind === 'chapter' && nextTab.packageId === selectedPackageId) void store.selectChapter(nextTab.chapterId);
-  }, [editorTabs, selectedPackageId, store.selectChapter]);
+  const closeTab = useCallback(async (tabId: string) => {
+    const tab = editorTabsRef.current.tabs.find((item) => item.id === tabId);
+    if (!tab || closingExperiments.current) return;
+    closingExperiments.current = tab.kind === 'experiment';
+    try {
+      if (tab.kind === 'experiment') {
+        const packageDir = workspacePackages.find((item) => item.id === tab.packageId)?.path;
+        if (!packageDir) {
+          notify({ level: 'error', title: '无法关闭实验标签', message: '找不到该实验所属的实验包。' });
+          return;
+        }
+        if (!await confirmExperimentClose(packageDir, tab.experimentId)) return;
+      }
+
+      const currentTabs = editorTabsRef.current;
+      const closingActiveTab = currentTabs.activeTabId === tabId;
+      const nextState = closeEditorTab(currentTabs, tabId);
+      editorTabsRef.current = nextState;
+      setEditorTabs(nextState);
+      if (!closingActiveTab) return;
+      const nextTab = nextState.tabs.find((item) => item.id === nextState.activeTabId);
+      if (nextTab?.kind === 'chapter' && nextTab.packageId === selectedPackageId) {
+        void store.selectChapter(nextTab.chapterId);
+      }
+    } finally {
+      closingExperiments.current = false;
+    }
+  }, [selectedPackageId, store.selectChapter, workspacePackages, confirmExperimentClose, notify]);
 
   const jumpToHeading = useCallback((headingId: string) => {
     document.getElementById(headingId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -273,11 +321,9 @@ export function App() {
   const finishImport = useCallback(async (dir: string, registered: RegisteredPackage) => {
     const packages = await window.learnlab.workspace.listPackages(dir);
     setWorkspacePackages(packages);
-    setSelectedPackageId(registered.id);
-    setEditorTabs(createEditorTabsState());
-    await store.loadPackageByPath(registered.path);
     notify({ level: 'info', title: '实验包已导入', message: `${registered.name} 已复制到学习区并登记。` });
-  }, [store.loadPackageByPath, notify]);
+    await switchPackage(registered);
+  }, [switchPackage, notify]);
 
   const importPackage = useCallback(async () => {
     if (!workspaceDir || importing) return;
@@ -361,17 +407,9 @@ export function App() {
   }
 
   const activeTab = editorTabs.tabs.find((tab) => tab.id === editorTabs.activeTabId);
-  const editor = activeTab?.kind === 'experiment' ? (
-    <ExperimentView
-      experiment={activeTab.experiment}
-      readonlyStatus={store.readonlyStatus}
-      packageDir={store.packageDir || ''}
-      activePlugins={store.activePlugins}
-      chapterId={activeTab.chapterId}
-    />
-  ) : editorTabs.activeTabId ? (
+  const chapterEditor = activeTab?.kind === 'chapter' ? (
     <ChapterReader
-      documentKey={editorTabs.activeTabId}
+      documentKey={activeTab.id}
       markdown={store.markdown}
       activeChapter={store.activeChapter}
       prevChapter={store.prevChapter}
@@ -389,7 +427,7 @@ export function App() {
       findIndex={store.findIndex}
       onFindTotal={store.reportFindTotal}
     />
-  ) : (
+  ) : !activeTab && (
     <div class="workbench-editor-empty">
       <strong>LearnLab</strong>
       <span>{store.chapters.length ? '从左侧打开一个章节' : '当前没有可打开的章节'}</span>
@@ -435,9 +473,25 @@ export function App() {
         tabs={editorTabs.tabs}
         activeTabId={editorTabs.activeTabId}
         onActivateTab={activateTab}
-        onCloseTab={closeTab}
+        onCloseTab={(tabId) => { void closeTab(tabId); }}
         sidebar={sidebar}
-        editor={editor}
+        editor={(
+          <div class="workbench-editor-panes">
+            {chapterEditor}
+            {store.packageDir && editorTabs.tabs.map((tab) => tab.kind === 'experiment' && (
+              <div key={tab.id} class="experiment-editor-pane" hidden={tab.id !== editorTabs.activeTabId}>
+                <ExperimentView
+                  experiment={tab.experiment}
+                  readonlyStatus={store.readonlyStatus}
+                  packageDir={store.packageDir ?? ''}
+                  activePlugins={store.activePlugins}
+                  chapterId={tab.chapterId}
+                  canStartExecution={canStartExperiment}
+                />
+              </div>
+            ))}
+          </div>
+        )}
         auxiliary={(
           <AuxiliarySidebar
             packageName={store.packageName}

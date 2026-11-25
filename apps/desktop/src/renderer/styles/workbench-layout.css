@@ -370,7 +370,8 @@
   overflow: hidden;
 }
 
-.workbench-editor-area > .chapter-reader {
+.workbench-editor-panes,
+.workbench-editor-panes > .chapter-reader {
   height: 100%;
 }
 

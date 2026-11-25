@@ -23,6 +23,7 @@ import type {
   PluginResolution,
   ExecutionPlan,
   ExecutionPlanError,
+  ExperimentCloseResult,
   ExecutionOutputEvent,
   ExecutionCompleteEvent
 } from '@learnlab/core-types';
@@ -83,6 +84,7 @@ export interface LearnLabAPI {
     start: (plan: ExecutionPlan) => Promise<Result<{ executionId: string }, ExecutionPlanError>>;
     cancel: (executionId: string) => Promise<void>;
     isRunning: (executionId: string) => Promise<boolean>;
+    confirmClose: (packageDir: string, labId?: string) => Promise<ExperimentCloseResult>;
     onOutput: (callback: (event: Electron.IpcRendererEvent, data: ExecutionOutputEvent) => void) => () => void;
     onComplete: (callback: (event: Electron.IpcRendererEvent, data: ExecutionCompleteEvent) => void) => () => void;
   };

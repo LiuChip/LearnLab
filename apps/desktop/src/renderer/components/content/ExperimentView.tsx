@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'preact/hooks';
+import { useCallback, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import type { ExperimentMarker } from '@learnlab/markdown';
 import type { PluginManifest } from '@learnlab/core-types';
 import type { PluginReadonlyStatus } from '../../utils/navigation';
@@ -10,6 +10,7 @@ interface ExperimentViewProps {
   packageDir: string;
   activePlugins: PluginManifest[];
   chapterId: string;
+  canStartExecution: () => boolean;
 }
 
 type ExperimentTab = 'instructions' | 'history';
@@ -30,7 +31,8 @@ export function ExperimentView({
   readonlyStatus,
   packageDir,
   activePlugins,
-  chapterId
+  chapterId,
+  canStartExecution
 }: ExperimentViewProps) {
   const [shownHints, setShownHints] = useState(0);
   const [activeTab, setActiveTab] = useState<ExperimentTab>('instructions');
@@ -45,20 +47,15 @@ export function ExperimentView({
   const plugin = findPluginForExperiment(activePlugins, experiment.experimentType);
   const canRun = !readonlyStatus.isReadOnly && !!plugin && experiment.type === 'auto';
 
-  // Clean up listeners on unmount or when executionId changes
-  useEffect(() => {
-    if (runStatus !== 'running') return;
-    const executionId = executionIdRef.current;
-    if (!executionId) return;
-
+  useLayoutEffect(() => {
     const removeOutput = window.learnlab.execution.onOutput((_evt, data) => {
-      if (data.executionId !== executionId) return;
+      if (data.executionId !== executionIdRef.current) return;
       setOutputLines((prev) => [...prev, data.text]);
     });
 
     const removeComplete = window.learnlab.execution.onComplete((_evt, data) => {
-      if (data.executionId !== executionId) return;
-      setRunStatus(data.status as RunStatus);
+      if (data.executionId !== executionIdRef.current) return;
+      setRunStatus(data.status);
       setReason(data.reason ?? null);
       executionIdRef.current = null;
       // Bump history key to force ExperimentHistory to reload
@@ -69,38 +66,47 @@ export function ExperimentView({
       removeOutput();
       removeComplete();
     };
-  }, [runStatus]);
+  }, []);
 
   const handleRun = useCallback(async () => {
-    if (!canRun || !plugin || runStatus === 'running') return;
-    const executionId = `${experiment.id}-${Date.now()}`;
+    if (!canRun || !plugin || executionIdRef.current || !canStartExecution()) return;
+    const executionId = crypto.randomUUID();
     executionIdRef.current = executionId;
     setRunStatus('running');
     setOutputLines([]);
     setReason(null);
 
-    const result = await window.learnlab.execution.start({
-      executionId,
-      labId: experiment.id,
-      chapterId,
-      pluginId: plugin.plugin_id,
-      packageDir,
-      experimentType: experiment.experimentType ?? '',
-      input: undefined,
-      timeoutMs: 30_000
-    });
-
-    if (!result.ok) {
+    let error: string;
+    try {
+      const result = await window.learnlab.execution.start({
+        executionId,
+        labId: experiment.id,
+        chapterId,
+        pluginId: plugin.plugin_id,
+        packageDir,
+        experimentType: experiment.experimentType ?? '',
+        timeoutMs: 30_000
+      });
+      if (result.ok) return;
+      error = result.error.message;
+    } catch {
+      error = '无法启动实验，请稍后重试。';
+    }
+    if (executionIdRef.current === executionId) {
       setRunStatus('failed');
-      setReason(result.error.message);
+      setReason(error);
       executionIdRef.current = null;
     }
-  }, [canRun, plugin, runStatus, experiment, chapterId, packageDir]);
+  }, [canRun, plugin, experiment, chapterId, packageDir, canStartExecution]);
 
   const handleCancel = useCallback(async () => {
     const executionId = executionIdRef.current;
     if (!executionId) return;
-    await window.learnlab.execution.cancel(executionId);
+    try {
+      await window.learnlab.execution.cancel(executionId);
+    } catch {
+      if (executionIdRef.current === executionId) setReason('未能确认实验进程已退出，请重试。');
+    }
   }, []);
 
   const statusLabel: Record<RunStatus, string> = {

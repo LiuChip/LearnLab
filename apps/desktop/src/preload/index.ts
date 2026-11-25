@@ -24,6 +24,7 @@ import type {
   PluginResolution,
   ExecutionPlan,
   ExecutionPlanError,
+  ExperimentCloseResult,
   ExecutionOutputEvent,
   ExecutionCompleteEvent
 } from '@learnlab/core-types';
@@ -110,6 +111,8 @@ const api = {
       ipcRenderer.invoke('execution:cancel', executionId),
     isRunning: (executionId: string): Promise<boolean> =>
       ipcRenderer.invoke('execution:is-running', executionId),
+    confirmClose: (packageDir: string, labId?: string): Promise<ExperimentCloseResult> =>
+      ipcRenderer.invoke('execution:confirm-close', packageDir, labId),
     onOutput: (callback: (event: Electron.IpcRendererEvent, data: ExecutionOutputEvent) => void) => {
       ipcRenderer.on('execution:output', callback as Parameters<typeof ipcRenderer.on>[1]);
       return () => ipcRenderer.removeListener('execution:output', callback as Parameters<typeof ipcRenderer.on>[1]);

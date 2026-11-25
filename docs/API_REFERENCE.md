@@ -185,10 +185,13 @@ resolveForPackage(packageDir: string): Promise<PluginResolution>
 
 ### `execution`
 
+宿主按发起窗口、实验包和实验 ID 查找执行。`confirmClose` 有关联执行时通过系统对话框确认，返回 `close`、`cancelled` 或带原因的 `failed`。省略 `labId` 时检查当前窗口在该包下的全部执行，用于切换包。`cancel` 会等待退出检查，`isRunning` 在回收期间仍为真，完成事件会在历史写入尝试后推送。
+
 ```ts
 start(plan: ExecutionPlan): Promise<Result<{ executionId: string }, ExecutionPlanError>>
 cancel(executionId: string): Promise<void>
 isRunning(executionId: string): Promise<boolean>
+confirmClose(packageDir: string, labId?: string): Promise<ExperimentCloseResult>
 onOutput(callback: (event, data: ExecutionOutputEvent) => void): () => void
 onComplete(callback: (event, data: ExecutionCompleteEvent) => void): () => void
 ```
@@ -214,7 +217,7 @@ channel 名称。每个 handler 会验证 renderer、主 frame，并按 `WebCont
 | config     | `config:read`, `config:write`, `config:export-json`, `config:import-json`, `config:backup-instructions`                                                                  |
 | dependency | `dependency:import-bundled`, `dependency:list`, `dependency:prerequisites`                                                                                               |
 | plugin     | `plugin:list`, `plugin:resolve-for-package`                                                                                                                              |
-| execution  | `execution:start`, `execution:cancel`, `execution:is-running`; push: `execution:output`, `execution:complete`                                                            |
+| execution  | `execution:start`, `execution:cancel`, `execution:is-running`, `execution:confirm-close`; push: `execution:output`, `execution:complete`                                                            |
 
 窗口启用 `nodeIntegration: false`、`contextIsolation: true`、`sandbox: true` 和
 `webSecurity: true`，拒绝未授权导航和窗口打开。单实例锁及重复启动时聚焦已有
@@ -274,6 +277,7 @@ context 只有只读的版本、workspace ID、名称和 package ID 类型，不
   `calculateFileStats`、`importBundledDependency`。
 - 注册表：`PackageRegisterError`、`createEmptyWorkspaceState`、`registerPackage`、
   `unregisterPackage`、`listRegisteredPackages`、`getRegisteredPackage`。
+- 目录导入使用 `importPackageIntoWorkspace`，将外部来源复制到学习区后登记。
 - 状态文件：`loadWorkspaceState`、`saveWorkspaceState`。
 - `WorkspaceManager`：`initWorkspace`、`registerPackage`、`unregisterPackage`、
   `listPackages`、`getPackage`、`importBundledDependency`、
@@ -345,7 +349,7 @@ SQLite 文件只在运行时支持 `node:sqlite` 时打开，否则抛出
 
 导出 `FrontMatter`、`HeadingEntry`、`MarkdownResult`、`ParseError`、
 `FrontMatterResult`，以及 `parseFrontMatter`、`parseMarkdown`、`extractHeadings`、
-`extractPlainText`。HTML 经过 `rehype-sanitize`，heading ID 使用 `user-content-`
+`extractPlainText`、当前文件匹配函数 `findInText` 与实验标记解析 `parseExperimentMarkers`。HTML 经过 `rehype-sanitize`，heading ID 使用 `user-content-`
 前缀；front matter 解析失败时 `parseMarkdown` 抛出名为 `MarkdownParseError` 的错误。
 
 ## 6. `@learnlab/labkit`
