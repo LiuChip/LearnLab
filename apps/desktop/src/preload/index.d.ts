@@ -24,6 +24,8 @@ import type {
   ExecutionPlan,
   ExecutionPlanError,
   ExperimentCloseResult,
+  PluginPermissionDecision,
+  PluginPermissionRequest,
   ExecutionOutputEvent,
   ExecutionCompleteEvent
 } from '@learnlab/core-types';
@@ -85,6 +87,9 @@ export interface LearnLabAPI {
     cancel: (executionId: string) => Promise<void>;
     isRunning: (executionId: string) => Promise<boolean>;
     confirmClose: (packageDir: string, labId?: string) => Promise<ExperimentCloseResult>;
+    respondToPermissionRequest: (requestId: string, decision: PluginPermissionDecision) => Promise<boolean>;
+    onPermissionRequest: (callback: (request: PluginPermissionRequest) => void) => () => void;
+    onPermissionRequestClosed: (callback: (requestId: string) => void) => () => void;
     onOutput: (callback: (event: Electron.IpcRendererEvent, data: ExecutionOutputEvent) => void) => () => void;
     onComplete: (callback: (event: Electron.IpcRendererEvent, data: ExecutionCompleteEvent) => void) => () => void;
   };

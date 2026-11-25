@@ -1,7 +1,7 @@
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import type { ExecutionPlan } from '../packages/core-types/src/execution';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { PluginHostService, type PluginHostEvent } from '../apps/desktop/src/main/services/plugin-host';
@@ -30,11 +30,12 @@ async function startPlugin(source: string, timeoutMs = 2500) {
   const packageDir = await mkdtemp(join(tmpdir(), 'learnlab-plugin-host-'));
   fixtureDirs.push(packageDir);
   const entrypoint = join(packageDir, 'plugin.cjs');
-  await writeFile(entrypoint, `
+  const approvedSource = Buffer.from(`
     const fs = require('node:fs');
     fs.writeFileSync('plugin.pid', String(process.pid));
     ${source}
   `);
+  await writeFile(entrypoint, approvedSource);
   const plan: ExecutionPlan = {
     executionId: 'execution-1',
     labId: 'lab',
@@ -47,7 +48,7 @@ async function startPlugin(source: string, timeoutMs = 2500) {
   const host = new PluginHostService();
   const events: PluginHostEvent[] = [];
   host.on('event', (event: PluginHostEvent) => events.push(event));
-  host.start(plan, entrypoint);
+  host.start(plan, entrypoint, approvedSource);
   return {
     host,
     id: plan.executionId,
@@ -72,6 +73,64 @@ function expectGone(pid: number) {
 }
 
 describe('PluginHostService', () => {
+  it('runs the project-owned fixture with an allowed resource and denies other reads', async () => {
+    const packageDir = await mkdtemp(join(tmpdir(), 'learnlab-plugin-scope-'));
+    fixtureDirs.push(packageDir);
+    const host = new PluginHostService();
+    const completed = vi.fn();
+    host.on('event', (event: PluginHostEvent) => {
+      if (event.type === 'complete') completed(event.data);
+    });
+    const entrypoint = resolve('plugins/plugin-host-check/runtime/index.js');
+    host.start({
+      executionId: 'host-check', labId: 'check', chapterId: 'intro',
+      pluginId: 'org.learnlab.host-check', packageDir, experimentType: 'host-check'
+    }, entrypoint, await readFile(entrypoint), {
+      'package.manifest': { id: 'fixture', name: 'Fixture', version: '1.0.0' }
+    });
+    try {
+      await vi.waitFor(() => expect(completed).toHaveBeenCalledWith(expect.objectContaining({
+        status: 'passed',
+        steps: [
+          { name: '读取已授权的包摘要', status: 'passed' },
+          { name: '拒绝读取未授权的章节', status: 'passed' }
+        ]
+      })));
+    } finally {
+      await host.shutdown();
+    }
+  });
+
+  it('rejects an oversized broker request before its newline arrives', async () => {
+    const fixture = await startPlugin(`
+      fs.writeSync(3, '{"id":1,"resource":"' + '界'.repeat(700));
+      setTimeout(() => fs.writeSync(3, '界'.repeat(700)), 30);
+      setInterval(() => {}, 1000);
+    `);
+    try {
+      await vi.waitFor(() => expect(fixture.completions()).toMatchObject([
+        { status: 'failed', reason: '插件宿主请求超过大小限制。' }
+      ]));
+      expect(fixture.host.isRunning(fixture.id)).toBe(false);
+    } finally {
+      await fixture.host.shutdown();
+    }
+  });
+
+  it('recovers after a plugin process crashes and accepts the next execution', async () => {
+    const fixture = await startPlugin('throw new Error("fixture crash")');
+    await vi.waitFor(() => expect(fixture.completions()).toMatchObject([{ status: 'failed', exitCode: 1 }]));
+    expect(fixture.host.isRunning(fixture.id)).toBe(false);
+    const event = fixture.events.find((entry) => entry.type === 'complete');
+    if (!event || event.type !== 'complete') throw new Error('Expected completion event');
+    const entry = join(event.plan.packageDir, 'restart.cjs');
+    await writeFile(entry, 'throw new Error("unapproved replacement");');
+    fixture.host.start({ ...event.plan, executionId: 'next' }, entry, Buffer.from('console.log("recovered");'));
+    await vi.waitFor(() => expect(fixture.completions()).toMatchObject([
+      { status: 'failed' }, { status: 'passed', executionId: 'next' }
+    ]));
+  });
+
   it('confirms cancellation for an absent execution', async () => {
     expect(await new PluginHostService().cancel('absent')).toBe(true);
   });

@@ -1,0 +1,10 @@
+plugin_id: org.learnlab.host-check
+version: 1.0.0
+author: LearnLab
+activation:
+  mode: package
+provides:
+  - host-check
+permissions:
+  read:
+    - package.manifest
