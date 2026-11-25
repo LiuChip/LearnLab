@@ -61,8 +61,15 @@ describe('workspace-manager and package registry', () => {
       );
       await writeFile(path.join(pkgDir1, 'chapters', 'ch1.md'), '# Chapter 1\nHello');
 
-      // Register pkg1
-      const res1 = await WorkspaceManager.registerPackage(workspaceDir, pkgDir1);
+      expect(await WorkspaceManager.getSetting(workspaceDir, 'last_package_id')).toBeUndefined();
+      // A session write sharing the workspace DB with an in-flight registration must preserve both.
+      const [res1] = await Promise.all([
+        WorkspaceManager.registerPackage(workspaceDir, pkgDir1),
+        WorkspaceManager.setSetting(workspaceDir, 'last_package_id', 'demo.pkg')
+      ]);
+      expect(await WorkspaceManager.getSetting(workspaceDir, 'last_package_id')).toBe('demo.pkg');
+      expect(await WorkspaceManager.listPackages(workspaceDir)).toMatchObject([{ id: 'demo.pkg' }]);
+
       expect(res1.ok).toBe(true);
       if (res1.ok) {
         expect(res1.value.id).toBe('demo.pkg');

@@ -1,3 +1,5 @@
+import type { PluginPermissions } from './permission';
+
 /**
  * Execution types for plugin-hosted experiment runs.
  * These define the minimal surface shared between core, main process,
@@ -37,6 +39,8 @@ export interface ExecutionPlanError {
     | 'plugin_missing_entrypoint'
     | 'package_not_trusted'
     | 'execution_already_running'
+    | 'permission_denied'
+    | 'permission_unavailable'
     | 'execution_cancelled';
   message: string;
 }
@@ -68,3 +72,13 @@ export interface ExecutionCompleteEvent {
 export type ExperimentCloseResult =
   | { status: 'close' | 'cancelled' }
   | { status: 'failed'; reason: string };
+export interface PluginPermissionRequest {
+  requestId: string;
+  pluginId: string;
+  pluginVersion: string;
+  packageName: string;
+  experimentTitle: string;
+  permissions: PluginPermissions;
+}
+
+export type PluginPermissionDecision = 'once' | 'always' | 'denied';

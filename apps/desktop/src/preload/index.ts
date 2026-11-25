@@ -25,6 +25,8 @@ import type {
   ExecutionPlan,
   ExecutionPlanError,
   ExperimentCloseResult,
+  PluginPermissionDecision,
+  PluginPermissionRequest,
   ExecutionOutputEvent,
   ExecutionCompleteEvent
 } from '@learnlab/core-types';
@@ -113,6 +115,18 @@ const api = {
       ipcRenderer.invoke('execution:is-running', executionId),
     confirmClose: (packageDir: string, labId?: string): Promise<ExperimentCloseResult> =>
       ipcRenderer.invoke('execution:confirm-close', packageDir, labId),
+    respondToPermissionRequest: (requestId: string, decision: PluginPermissionDecision): Promise<boolean> =>
+      ipcRenderer.invoke('execution:respond-permission', requestId, decision),
+    onPermissionRequest: (callback: (request: PluginPermissionRequest) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, request: PluginPermissionRequest) => callback(request);
+      ipcRenderer.on('execution:permission-request', listener);
+      return () => ipcRenderer.removeListener('execution:permission-request', listener);
+    },
+    onPermissionRequestClosed: (callback: (requestId: string) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, requestId: string) => callback(requestId);
+      ipcRenderer.on('execution:permission-closed', listener);
+      return () => ipcRenderer.removeListener('execution:permission-closed', listener);
+    },
     onOutput: (callback: (event: Electron.IpcRendererEvent, data: ExecutionOutputEvent) => void) => {
       ipcRenderer.on('execution:output', callback as Parameters<typeof ipcRenderer.on>[1]);
       return () => ipcRenderer.removeListener('execution:output', callback as Parameters<typeof ipcRenderer.on>[1]);

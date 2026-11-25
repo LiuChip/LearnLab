@@ -4,13 +4,15 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ExecutionPlan } from '@learnlab/core-types';
 import { prepareExperimentLaunch } from '../apps/desktop/src/main/services/experiment-launch';
+import { hasPluginGrant, savePluginGrant } from '../apps/desktop/src/main/services/plugin-grants';
 
 let root: string;
 let plan: ExecutionPlan;
 
 vi.mock('../apps/desktop/src/main/services/paths', () => ({
   getDefaultPluginsDir: () => join(root, 'plugins'),
-  getDefaultConfigPath: () => join(root, 'config.json')
+  getDefaultConfigPath: () => join(root, 'config.json'),
+  getLearnLabHome: () => root
 }));
 
 async function makePlugin(directory: string, id: string, version: string, type = 'query', entry = true) {
@@ -58,7 +60,31 @@ describe('main process experiment launch preparation', () => {
   it('uses the compatible installation from the registered manifest', async () => {
     const expected = await makePlugin('sql-1', plan.pluginId, '1.1.0');
     await makePlugin(plan.pluginId, plan.pluginId, '2.0.0');
-    await expect(prepareExperimentLaunch(plan)).resolves.toEqual({ ok: true, value: expected });
+    await expect(prepareExperimentLaunch(plan)).resolves.toMatchObject({ ok: true, value: { entrypoint: expected } });
+  });
+
+  it('scopes a durable grant to the supported read capabilities and the installed entrypoint', async () => {
+    const entry = await makePlugin('sql', plan.pluginId, '1.1.0');
+    await writeFile(join(root, 'plugins', 'sql', 'manifest.yaml'),
+      `plugin_id: ${plan.pluginId}\nversion: 1.1.0\nprovides: [query]\npermissions:\n  read: [package.manifest, package.chapter, app.settings]\n`);
+    await writeFile(join(plan.packageDir, 'chapters', 'intro.md'), [
+      '```lab', 'id: select', 'type: auto', 'experiment_type: query',
+      'permissions:', '  read: [package.manifest, app.settings]', '```'
+    ].join('\n'));
+    const launch = await prepareExperimentLaunch(plan);
+    if (!launch.ok) throw new Error(launch.error.message);
+    expect(launch.value.permissions).toEqual({ read: ['package.manifest'], execute: ['plugin.run'] });
+    expect(Object.keys(launch.value.resources)).toEqual(['package.manifest']);
+    expect(await hasPluginGrant(launch.value.grantKey)).toBe(false);
+    await Promise.all([savePluginGrant(launch.value.grantKey), savePluginGrant(launch.value.grantKey)]);
+    expect(await hasPluginGrant(launch.value.grantKey)).toBe(true);
+    await writeFile(entry, '// changed installation');
+    const changed = await prepareExperimentLaunch(plan);
+    if (!changed.ok) throw new Error(changed.error.message);
+    expect(launch.value.entrySource.toString()).toBe('// test fixture');
+    expect(changed.value.entrySource.toString()).toBe('// changed installation');
+    expect(changed.value.grantKey).not.toBe(launch.value.grantKey);
+    expect(await hasPluginGrant(changed.value.grantKey)).toBe(false);
   });
 
   it.each([{ labId: 'missing' }, { labId: 'manual' }, { chapterId: 'missing' }, { experimentType: 'other' }])(

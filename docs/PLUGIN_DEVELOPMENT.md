@@ -22,7 +22,17 @@ Before launch, it checks the chapter's automatic experiment declaration against
 the selected plugin's `provides` field. It resolves the plugin again using current
 settings and uses the installation directory of the selected compatible version.
 Duplicate installations of the same plugin ID and selected version block launch.
-Runtime authorization and the official plugin implementations are pending.
+Native process launch requires consent in the desktop notification center.
+Build the local entry as a bundled CommonJS program. The host executes a snapshot
+of the entry used to compute the authorization key.
+An approved run may request `package.manifest` or `package.chapter` by writing a
+UTF-8 JSON line `{ id, resource }` to file descriptor 3. Read the JSON line reply
+from descriptor 4. The request ID is an integer. The host replies with
+`{ id, ok: true, value }` or `{ id, ok: false, error: 'resource_not_allowed' }`.
+Release the reply stream after the last response so the process can exit.
+Both the plugin manifest and the chapter experiment must request the read capability.
+See the [host verification fixture](../plugins/plugin-host-check/README.md).
+Official MySQL execution and additional resource types are planned for later work.
 The context types and permission resolver remain experimental.
 
 Planned settings UI (`not-available`): when a plugin registers settings, the
@@ -149,9 +159,8 @@ workspace、数据库、配置、依赖和搜索方法；完整签名统一维�
 读取禁用设置并返回解析结果；二者都不执行插件代码。
 
 The bridge is protected by Electron context isolation and main-process
-validation. It is exposed to the renderer, not to plugin code, and should not
-be copied into a plugin API contract. A future plugin host must expose a
-smaller allowlist derived from effective permissions and current context.
+validation. The renderer uses this bridge. The child process uses the separate
+private read protocol described above.
 
 ## Permissions and scope: current boundary
 
@@ -159,9 +168,9 @@ The project direction uses `read`, `write`, and `execute` permission families,
 and the repository now contains an experimental pure-logic
 `resolvePermissions` helper. It intersects plugin declarations, the current
 package request, user grants, and host capabilities; a missing package request
-produces no effective permissions. This helper is not wired into a plugin host
-and does not grant runtime access. Capability IDs, merge/revocation behavior,
-and persistence are still not frozen. 当前 ResolvedPermissions 的 ReadonlySet 是 TypeScript 类型层只读视图，不是运行时授权隔离；真正宿主接线前必须重新设计运行时不可变/受控句柄，不要把它当成安全边界。
+produces no effective permissions. The host uses this helper to select the
+read capabilities shown in the approval request and available after consent.
+See the [security design](SECURITY.md) for persistent approval scope and removal.
 
 Until the runtime contract is frozen:
 
@@ -194,13 +203,11 @@ guarantee.
 The following must not be implemented by guessing at an API from this
 document:
 
-- plugin process startup and lifecycle;
-- permission prompts, grants, revocation, and persistence;
+- public plugin lifecycle hooks and grant management UI;
 - full read/write/execute capability ID catalogues;
 - full AppContext, WorkspaceContext, and PackageContext runtime objects (only the minimal readonly type boundaries have been established in core-types);
 - commands, panels, context menus, status-bar contributions, and icons;
-- package experiment execution and external process supervision;
-- crash isolation and developer mode;
+- general-purpose external process API and developer mode;
 - a stable `@learnlab/plugin-sdk` entry point.
 
 When any of these are frozen and implemented, update this document together

@@ -192,13 +192,16 @@ start(plan: ExecutionPlan): Promise<Result<{ executionId: string }, ExecutionPla
 cancel(executionId: string): Promise<void>
 isRunning(executionId: string): Promise<boolean>
 confirmClose(packageDir: string, labId?: string): Promise<ExperimentCloseResult>
+respondToPermissionRequest(requestId: string, decision: PluginPermissionDecision): Promise<boolean>
+onPermissionRequest(callback: (request: PluginPermissionRequest) => void): () => void
+onPermissionRequestClosed(callback: (requestId: string) => void): () => void
 onOutput(callback: (event, data: ExecutionOutputEvent) => void): () => void
 onComplete(callback: (event, data: ExecutionCompleteEvent) => void): () => void
 ```
 
 `ExecutionPlan` 的必填字段为 `executionId`（无路径分隔符）、`labId`、`chapterId`、`pluginId`、`packageDir` 和 `experimentType`。可选字段为 `input` 和 `timeoutMs`（最大 300 000 ms，默认 30 000 ms）。
 
-主进程检查当前窗口与学习区路径，读取章节中的自动实验声明，并依据当前插件设置与包的依赖约束解析活动插件。插件必须声明对应的实验类型。入口从解析所得版本的安装目录读取。同 ID 同版本的重复安装会被拒绝。启动资格检查失败可返回 `invalid_plan`、`package_not_trusted`、`plugin_not_allowed`、`plugin_not_found` 或 `plugin_missing_entrypoint`。运行冲突返回 `execution_already_running`，关闭期间撤销的启动返回 `execution_cancelled`。`onOutput` 和 `onComplete` 返回监听注销函数。
+主进程检查当前窗口与学习区路径，读取章节中的自动实验声明，并依据当前插件设置与包的依赖约束解析活动插件。插件必须声明对应的实验类型。入口从解析所得版本的安装目录读取。同 ID 同版本的重复安装会被拒绝。启动资格检查失败可返回 `invalid_plan`、`package_not_trusted`、`plugin_not_allowed`、`plugin_not_found` 或 `plugin_missing_entrypoint`。运行冲突返回 `execution_already_running`，关闭期间撤销的启动返回 `execution_cancelled`。拒绝授权返回 `permission_denied`，无法应用授权返回 `permission_unavailable`。只有发起窗口可以处理对应请求。`onOutput` 和 `onComplete` 返回监听注销函数。
 
 `plugins` 只读取 manifest、注册表和解析结果，不启动插件进程；`database`、
 `config`、`dependencies` 以及返回绝对路径的接口不得直接交给不受信任插件。
@@ -219,7 +222,7 @@ channel 名称。每个 handler 会验证 renderer、主 frame，并按 `WebCont
 | config     | `config:read`, `config:write`, `config:export-json`, `config:import-json`, `config:backup-instructions`                                                                  |
 | dependency | `dependency:import-bundled`, `dependency:list`, `dependency:prerequisites`                                                                                               |
 | plugin     | `plugin:list`, `plugin:resolve-for-package`                                                                                                                              |
-| execution  | `execution:start`, `execution:cancel`, `execution:is-running`, `execution:confirm-close`; push: `execution:output`, `execution:complete`                                                            |
+| execution  | `execution:start`, `execution:cancel`, `execution:is-running`, `execution:confirm-close`, `execution:respond-permission`。推送包含 `execution:output`、`execution:complete`、`execution:permission-request` 和 `execution:permission-closed`                                                            |
 
 窗口启用 `nodeIntegration: false`、`contextIsolation: true`、`sandbox: true` 和
 `webSecurity: true`，拒绝未授权导航和窗口打开。单实例锁及重复启动时聚焦已有
@@ -283,7 +286,7 @@ context 只有只读的版本、workspace ID、名称和 package ID 类型，不
 - 目录导入使用 `importPackageIntoWorkspace`，将外部来源复制到学习区后登记。
 - 状态文件：`loadWorkspaceState`、`saveWorkspaceState`。
 - `WorkspaceManager`：`initWorkspace`、`registerPackage`、`unregisterPackage`、
-  `listPackages`、`getPackage`、`importBundledDependency`、
+  `listPackages`、`getPackage`、`getSetting`、`setSetting`、`importBundledDependency`、
   `getWorkspaceDependencies`、`getWorkspacePrerequisites` 静态方法。
 
 ### Tar、配置和设置
@@ -344,9 +347,9 @@ SQLite 文件只在运行时支持 `node:sqlite` 时打开，否则抛出
   `calculateScrollProgress`、`evaluatePluginReadonlyStatus`。
 - 权限纯逻辑：`PermissionResolutionInput`、`ResolvedPermissions`、`resolvePermissions`。
 
-搜索正则有 MVP 启发式限制，不是完整 regex sandbox。权限 resolver 只计算声明、
-包请求、用户授权和宿主能力的交集；`ReadonlySet` 只是 TypeScript 类型层只读视图，
-没有连接插件进程、IPC 或操作系统沙箱。
+搜索正则有 MVP 启发式限制。权限 resolver 计算声明、包请求、用户授权和宿主能力
+的交集。主进程在准备实验启动时调用该函数，结果用于生成可批准的宿主读取能力。
+返回结果中的 `ReadonlySet` 是 TypeScript 类型层的只读视图。
 
 ## 5. `@learnlab/markdown`
 
@@ -374,17 +377,16 @@ SQLite 文件只在运行时支持 `node:sqlite` 时打开，否则抛出
 
 ## 8. 未开放能力
 
-当前没有公共插件 API：真实插件宿主进程、代码执行、生命周期回调、插件 IPC、
-稳定 `@learnlab/plugin-sdk`、网络/剪贴板/外部文件/进程/环境变量 API、完整冻结
-capability ID、授权弹窗/撤销/持久化、运行时 context 注入、`registerPanel`、
-`registerCommand`、`registerAction`、菜单/状态栏/图标 descriptor、实验监督、
-崩溃隔离、开发者模式、包市场或依赖仓库网络下载协议。
+稳定 `@learnlab/plugin-sdk`、公共插件生命周期回调和 IPC、授权管理界面、
+网络/剪贴板/外部文件/进程/环境变量 API、完整 capability ID、运行时 context 注入、
+`registerPanel`、`registerCommand`、`registerAction`、菜单/状态栏/图标描述符、
+开发者模式、包市场和依赖仓库网络下载协议仍在规划。
 
 ## 9. 安全和维护门禁
 
 - `window.learnlab` 只给受信 renderer，不是插件隔离层；桥接和 core 返回的绝对
   路径不得传给不受信任插件。
-- manifest 的 `permissions`、`signature`、`api_version` 当前不产生运行时授权或信任结论。
+- 主进程使用 manifest 的 `permissions.read` 缩小可申请的宿主能力。授权来自用户决定，签名校验和 API 兼容性策略仍待实现。
 - 每轮实现前读取[路线图](ROADMAP.md)、[公开决策索引](DECISIONS.md)、相关设计文档和本表；本地迭代可补读被 Git 忽略的 `Plan.md`、`UNFREEZE.md`。
 - 每轮写代码后扫描 diff 中新增/改变的 `export`、package `exports`、
   `contextBridge`、`ipcMain.handle`、manifest 字段、文件格式和 CLI 入口。

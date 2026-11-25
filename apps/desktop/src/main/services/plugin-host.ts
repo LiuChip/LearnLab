@@ -14,7 +14,24 @@ const KILL_GRACE_MS = 1000;
 const EXIT_POLL_MS = 20;
 const EXIT_RECHECK_MS = 250;
 const OUTPUT_DRAIN_MS = 25;
+const BROKER_REQUEST_FD = 3;
+const BROKER_RESPONSE_FD = 4;
+const MAX_BROKER_REQUESTS = 16;
+const MAX_BROKER_REQUEST_BYTES = 4 * 1024;
+// Allow a 128 KiB chapter snapshot even when JSON escapes each byte as six characters.
+const MAX_BROKER_RESPONSE_BYTES = 1024 * 1024;
 const execFileAsync = promisify(execFile);
+const RUN_APPROVED_ENTRY = String.raw`
+const { readFileSync } = require('node:fs');
+const { createRequire } = require('node:module');
+const { dirname } = require('node:path');
+const { compileFunction } = require('node:vm');
+const filename = process.argv[1];
+const source = readFileSync(0, 'utf8').replace(/^#![^\r\n]*/, '');
+const entry = { exports: {}, filename };
+const run = compileFunction(source, ['exports', 'require', 'module', '__filename', '__dirname'], { filename });
+run.call(entry.exports, entry.exports, createRequire(filename), entry, filename, dirname(filename));
+`;
 
 type ExecutionOutcome = Pick<ExecutionCompleteEvent, 'status' | 'exitCode' | 'durationMs' | 'reason'>;
 
@@ -47,16 +64,19 @@ export class PluginHostService extends EventEmitter {
 
   /**
    * Launches a plugin process for the given plan.
-   * The entrypoint must already be validated by the caller.
+   * The caller supplies the same entry bytes that were checked for authorization.
    */
-  start(plan: ExecutionPlan, pluginEntrypoint: string): void {
+  start(
+    plan: ExecutionPlan, pluginEntrypoint: string, entrySource: Buffer,
+    resources: Readonly<Record<string, unknown>> = {}
+  ): void {
     if (this.active.has(plan.executionId)) return;
 
     const ownsGroup = process.platform !== 'win32';
-    const child = spawn(process.execPath, [pluginEntrypoint], {
+    const child = spawn(process.execPath, ['--eval', RUN_APPROVED_ENTRY, '--', pluginEntrypoint], {
       cwd: plan.packageDir,
       env: { ...buildPluginEnv(plan.packageDir, plan), ELECTRON_RUN_AS_NODE: '1' },
-      stdio: ['ignore', 'pipe', 'pipe'],
+      stdio: ['pipe', 'pipe', 'pipe', 'pipe', 'pipe'],
       // POSIX detached children lead a new process group. Windows tracks only the child.
       detached: ownsGroup
     });
@@ -78,6 +98,12 @@ export class PluginHostService extends EventEmitter {
       stdout: []
     };
     this.active.set(plan.executionId, execution);
+
+    this.attachBroker(execution, resources);
+    child.stdin?.on('error', () => {
+      // Child exit and timeout own outcome reporting.
+    });
+    child.stdin?.end(entrySource);
 
     child.stdout?.on('data', (chunk: Buffer) => {
       if (execution.outcome && !execution.draining) return;
@@ -128,6 +154,87 @@ export class PluginHostService extends EventEmitter {
     });
   }
 
+  private attachBroker(execution: ActiveExecution, resources: Readonly<Record<string, unknown>>): void {
+    // spawn's extra 'pipe' descriptors expose duplex streams on the parent side.
+    const requestPipe = execution.process.stdio?.[BROKER_REQUEST_FD];
+    const responsePipe = execution.process.stdio?.[BROKER_RESPONSE_FD];
+    if (!requestPipe || !responsePipe || !('write' in responsePipe)) return;
+
+    const frame = Buffer.alloc(MAX_BROKER_REQUEST_BYTES);
+    let frameBytes = 0;
+    let requests = 0;
+
+    const fail = (reason: string): void => {
+      this.closeBroker(execution.process);
+      // Buffered requests may arrive during the bounded drain after a clean exit.
+      if (execution.draining && execution.outcome?.status === 'passed') {
+        execution.outcome = { ...execution.outcome, status: 'failed', reason };
+      }
+      void this.finish(execution, 'failed', undefined, reason);
+    };
+
+    // Pipe errors can race with child exit. Execution cleanup owns both streams.
+    requestPipe.on('error', () => {});
+    responsePipe.on('error', () => {});
+    requestPipe.on('data', (chunk: Buffer) => {
+      if (execution.outcome && !execution.draining) return;
+      let offset = 0;
+      while (offset < chunk.length) {
+        const newline = chunk.indexOf(0x0a, offset);
+        const end = newline === -1 ? chunk.length : newline;
+        const bytes = end - offset;
+        if (frameBytes + bytes > frame.length) {
+          fail('插件宿主请求超过大小限制。');
+          return;
+        }
+        chunk.copy(frame, frameBytes, offset, end);
+        frameBytes += bytes;
+        if (newline === -1) return;
+        offset = newline + 1;
+
+        if (++requests > MAX_BROKER_REQUESTS) {
+          fail('插件宿主请求超过限制。');
+          return;
+        }
+        const request = frame.subarray(0, frameBytes);
+        frameBytes = 0;
+        if (execution.outcome || !responsePipe.writable) continue;
+
+        let message: unknown;
+        try {
+          message = JSON.parse(request.toString('utf8'));
+        } catch {
+          continue;
+        }
+        if (typeof message !== 'object' || message === null) continue;
+        const { id, resource } = message as Record<string, unknown>;
+        if (!Number.isSafeInteger(id) || typeof resource !== 'string') continue;
+
+        const reply = Object.hasOwn(resources, resource)
+          ? { id, ok: true, value: resources[resource] }
+          : { id, ok: false, error: 'resource_not_allowed' };
+        let line: string;
+        try {
+          line = JSON.stringify(reply) + '\n';
+        } catch {
+          fail('插件宿主响应无法编码。');
+          return;
+        }
+        // writableLength counts buffered bytes. Fail before a slow reader can queue more.
+        if (responsePipe.writableLength + Buffer.byteLength(line) > MAX_BROKER_RESPONSE_BYTES) {
+          fail('插件宿主响应超过大小限制。');
+          return;
+        }
+        responsePipe.write(line);
+      }
+    });
+  }
+
+  private closeBroker(child: ChildProcess): void {
+    child.stdio?.[BROKER_REQUEST_FD]?.destroy();
+    child.stdio?.[BROKER_RESPONSE_FD]?.destroy();
+  }
+
   cancel(executionId: string): Promise<boolean> {
     const execution = this.active.get(executionId);
     return execution ? this.finish(execution, 'cancelled') : Promise.resolve(true);
@@ -143,6 +250,11 @@ export class PluginHostService extends EventEmitter {
         void this.finish(execution, 'cancelled');
       }
     }
+  }
+
+  async shutdown(): Promise<boolean> {
+    const results = await Promise.all([...this.active.keys()].map((id) => this.cancel(id)));
+    return results.every(Boolean);
   }
 
   private finish(
@@ -168,6 +280,7 @@ export class PluginHostService extends EventEmitter {
     if (execution.cleanup) return execution.cleanup;
     clearTimeout(execution.timeoutHandle);
     clearTimeout(execution.exitRecheck);
+    if (!execution.draining) this.closeBroker(execution.process);
     // Assign the shared promise before signaling, which can trigger child events.
     execution.cleanup = Promise.resolve().then(async () => {
       if (!(await this.terminate(execution))) {
@@ -241,9 +354,15 @@ export class PluginHostService extends EventEmitter {
 
   private recheckExit(execution: ActiveExecution): void {
     execution.exitRecheck = setTimeout(() => {
-      if (this.hasExited(execution)) void this.cleanup(execution);
-      else this.recheckExit(execution);
+      void this.recheckRemainingGroup(execution);
     }, EXIT_RECHECK_MS).unref();
+  }
+
+  private async recheckRemainingGroup(execution: ActiveExecution): Promise<void> {
+    const exited = this.hasExited(execution) || await this.linuxGroupHasNoLiveMembers(execution);
+    if (execution.cleanup) return;
+    if (exited) void this.cleanup(execution);
+    else this.recheckExit(execution);
   }
 
   private async complete(execution: ActiveExecution): Promise<void> {
@@ -254,6 +373,7 @@ export class PluginHostService extends EventEmitter {
     const outcome = this.recordOutcome(execution, exitCode === 0 ? 'passed' : 'failed', exitCode ?? undefined);
     execution.process.stdout?.destroy();
     execution.process.stderr?.destroy();
+    this.closeBroker(execution.process);
 
     const executionId = execution.plan.executionId;
     this.active.delete(executionId);

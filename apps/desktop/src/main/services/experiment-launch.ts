@@ -1,12 +1,31 @@
-import { loadPackage, readChapter, resolvePluginEntrypoint } from '@learnlab/core';
-import type { ExecutionPlan, ExecutionPlanError, Result } from '@learnlab/core-types';
+import { constants } from 'node:fs';
+import { open, realpath } from 'node:fs/promises';
+import {
+  calculateBufferSha256, loadPackage, readChapter, resolvePermissions, resolvePluginEntrypoint
+} from '@learnlab/core';
+import type { ExecutionPlan, ExecutionPlanError, PluginPermissions, Result } from '@learnlab/core-types';
 import { parseExperimentMarkers } from '@learnlab/markdown';
 import { getDefaultPluginsDir } from './paths';
 import { resolveInstalledPluginsForPackage } from './plugin-registry';
+import { createPluginGrantKey } from './plugin-grants';
+
+const CHAPTER_LIMIT_BYTES = 128 * 1024;
+const ENTRY_LIMIT_BYTES = 8 * 1024 * 1024;
+
+export interface PreparedExperimentLaunch {
+  entrypoint: string;
+  entrySource: Buffer;
+  grantKey: string;
+  packageName: string;
+  pluginVersion: string;
+  experimentTitle: string;
+  permissions: PluginPermissions;
+  resources: Readonly<Partial<Record<'package.manifest' | 'package.chapter', unknown>>>;
+}
 
 export async function prepareExperimentLaunch(
   plan: ExecutionPlan
-): Promise<Result<string, ExecutionPlanError>> {
+): Promise<Result<PreparedExperimentLaunch, ExecutionPlanError>> {
   const loaded = await loadPackage(plan.packageDir);
   if (!loaded.ok) {
     return { ok: false, error: { type: 'invalid_plan', message: '无法读取当前实验包。' } };
@@ -38,5 +57,58 @@ export async function prepareExperimentLaunch(
   if (matches.length !== 1) {
     return { ok: false, error: { type: 'plugin_not_allowed', message: '存在多个相同版本的插件安装，请清理重复安装。' } };
   }
-  return resolvePluginEntrypoint(getDefaultPluginsDir(), matches[0].directoryName);
+  const entry = await resolvePluginEntrypoint(getDefaultPluginsDir(), matches[0].directoryName);
+  if (!entry.ok) return entry;
+  const entrySource = await readEntrySnapshot(entry.value).catch(() => undefined);
+  if (!entrySource) {
+    return { ok: false, error: { type: 'plugin_missing_entrypoint', message: '无法读取插件入口，或入口文件超过 8 MiB。' } };
+  }
+
+  const { manifest } = loaded.value;
+  const resources = {
+    'package.manifest': { id: manifest.id, name: manifest.name, version: manifest.version },
+    ...(markdown.ok && Buffer.byteLength(markdown.value) <= CHAPTER_LIMIT_BYTES && {
+      'package.chapter': { id: chapter.id, text: markdown.value }
+    })
+  };
+  const supported = { read: Object.keys(resources) };
+  const eligible = resolvePermissions({
+    declared: selected.permissions ?? {},
+    requestedByPackage: { read: experiment.requestedRead ?? [] },
+    grantedByUser: supported,
+    hostCapabilities: supported
+  });
+  const read = [...eligible.read].sort();
+  const permissions = { read, execute: ['plugin.run'] };
+  const grantKey = createPluginGrantKey([
+    'plugin-run-v1', await realpath(plan.packageDir), manifest.id, manifest.version,
+    selected, entry.value, calculateBufferSha256(entrySource), permissions
+  ]);
+  return {
+    ok: true,
+    value: {
+      entrypoint: entry.value, entrySource, grantKey, packageName: manifest.name, pluginVersion: selected.version,
+      experimentTitle: experiment.title, permissions,
+      resources: Object.fromEntries(Object.entries(resources).filter(([key]) => eligible.read.has(key)))
+    }
+  };
+}
+
+async function readEntrySnapshot(entrypoint: string): Promise<Buffer | undefined> {
+  const file = await open(entrypoint, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+  try {
+    const stat = await file.stat();
+    if (!stat.isFile() || stat.size > ENTRY_LIMIT_BYTES) return undefined;
+    const source = Buffer.alloc(stat.size + 1);
+    let offset = 0;
+    while (offset < source.length) {
+      const { bytesRead } = await file.read(source, offset, source.length - offset);
+      if (bytesRead === 0) return source.subarray(0, offset);
+      offset += bytesRead;
+    }
+    // A concurrent write grew the entry. Requiring a retry avoids accepting a partial program.
+    return undefined;
+  } finally {
+    await file.close();
+  }
 }

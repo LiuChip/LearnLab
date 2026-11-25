@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from 'preact/hooks';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import type {
+  PluginPermissionDecision,
   RegisteredPackage
 } from '@learnlab/core-types';
 import { ChapterReader } from './components/content/ChapterReader';
@@ -27,11 +28,13 @@ import {
 } from './stores/tabStore';
 import {
   addNotification,
+  addPermissionRequest,
   clearNotifications,
   createWorkbenchState,
   dismissNotification,
   expireNotification,
   getUnreadNotificationCount,
+  resolvePermissionRequest,
   selectActivity,
   setBottomPanel,
   toggleNotificationCenter,
@@ -77,11 +80,44 @@ export function App() {
   const editorTabsRef = useRef(editorTabs);
   editorTabsRef.current = editorTabs;
   const closingExperiments = useRef(false);
+  const respondingToPermissions = useRef(new Set<string>());
   const canStartExperiment = useCallback(() => !closingExperiments.current, []);
 
   const notify = useCallback((input: NotificationInput) => {
     setWorkbench((state) => addNotification(state, input));
   }, []);
+
+  useLayoutEffect(() => {
+    const execution = window.learnlab.execution;
+    const removeRequest = execution.onPermissionRequest((request) => {
+      setWorkbench((state) => addPermissionRequest(state, request));
+    });
+    const removeClosed = execution.onPermissionRequestClosed((requestId) => {
+      setWorkbench((state) => resolvePermissionRequest(state, requestId, 'closed'));
+    });
+    return () => {
+      removeRequest();
+      removeClosed();
+    };
+  }, []);
+
+  const respondToPermission = useCallback(async (requestId: string, decision: PluginPermissionDecision) => {
+    const responding = respondingToPermissions.current;
+    if (responding.has(requestId)) return;
+    responding.add(requestId);
+    try {
+      const accepted = await window.learnlab.execution.respondToPermissionRequest(requestId, decision);
+      setWorkbench((state) => resolvePermissionRequest(state, requestId, accepted ? decision : 'closed'));
+    } catch {
+      notify({
+        level: 'error',
+        title: '无法提交权限决定',
+        message: '请在通知中心重试。'
+      });
+    } finally {
+      responding.delete(requestId);
+    }
+  }, [notify]);
 
   useEffect(() => {
     let cancelled = false;
@@ -466,6 +502,7 @@ export function App() {
         onExpireNotification={expire}
         onDismissNotification={dismiss}
         onClearNotifications={() => setWorkbench(clearNotifications)}
+        onRespondToPermission={respondToPermission}
         onQuickOpen={() => setQuickOpenVisible(true)}
         onResizePrimary={setPrimaryWidth}
         onResizeAuxiliary={setAuxiliaryWidth}

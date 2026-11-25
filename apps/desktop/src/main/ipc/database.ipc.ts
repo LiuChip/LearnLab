@@ -1,6 +1,6 @@
 import { ipcMain } from 'electron';
 import {
-  getExperimentAttempts, recordExperimentAttempt, syncChapterProgress,
+  getExperimentAttempts, recordExperimentAttempt, syncChapterProgress, WorkspaceManager,
   type ChapterProgressUpdate, type ExperimentAttemptDetail
 } from '@learnlab/core';
 import { DesktopDatabaseService } from '../services/database';
@@ -50,13 +50,13 @@ export function registerDatabaseIpc(): void {
 
   ipcMain.handle('database:get-workspace-setting', async (event, workspaceDir: string, key: string) => {
     assertTrustedRenderer(event);
-    const db = DesktopDatabaseService.getWorkspaceDb(assertTrustedWorkspace(event.sender, workspaceDir));
-    return db.getSetting(requireIdentifier(key, 'key')) ?? null;
+    const trustedDir = assertTrustedWorkspace(event.sender, workspaceDir);
+    return (await WorkspaceManager.getSetting(trustedDir, requireIdentifier(key, 'key'))) ?? null;
   });
 
   ipcMain.handle('database:set-workspace-setting', async (event, workspaceDir: string, key: string, value: string) => {
     assertTrustedRenderer(event);
-    const db = DesktopDatabaseService.getWorkspaceDb(assertTrustedWorkspace(event.sender, workspaceDir));
-    db.setSetting(requireIdentifier(key, 'key'), requireNonEmptyString(value, 'value'));
+    const trustedDir = assertTrustedWorkspace(event.sender, workspaceDir);
+    await WorkspaceManager.setSetting(trustedDir, requireIdentifier(key, 'key'), requireNonEmptyString(value, 'value'));
   });
 }

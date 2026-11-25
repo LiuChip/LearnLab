@@ -1,13 +1,19 @@
+import type { PluginPermissionDecision, PluginPermissionRequest } from '@learnlab/core-types';
 import type { WorkbenchActivityId } from '../utils/workbench';
 
 export type WorkbenchTheme = 'dark' | 'light';
 export type BottomPanelId = 'output' | 'history' | 'problems';
 export type NotificationLevel = 'info' | 'warning' | 'error';
+type PermissionRequestStatus = 'pending' | 'closed' | PluginPermissionDecision;
 
 export interface NotificationInput {
   level: NotificationLevel;
   title: string;
   message: string;
+  permission?: {
+    request: PluginPermissionRequest;
+    status: PermissionRequestStatus;
+  };
 }
 
 export interface NotificationEntry extends NotificationInput {
@@ -76,6 +82,36 @@ export function addNotification(
   };
 }
 
+export function addPermissionRequest(
+  state: WorkbenchState,
+  request: PluginPermissionRequest
+): WorkbenchState {
+  if (state.notifications.some((item) => item.permission?.request.requestId === request.requestId)) return state;
+  return addNotification(state, {
+    level: 'info',
+    title: '插件请求权限',
+    message: `${request.pluginId} · v${request.pluginVersion}`,
+    permission: { request, status: 'pending' }
+  });
+}
+
+export function resolvePermissionRequest(
+  state: WorkbenchState,
+  requestId: string,
+  status: Exclude<PermissionRequestStatus, 'pending'>
+): WorkbenchState {
+  return {
+    ...state,
+    notifications: state.notifications.map((item) => {
+      const permission = item.permission;
+      if (permission?.request.requestId !== requestId) return item;
+      // A close event can reach the renderer before the reply to a submitted decision.
+      if (permission.status !== 'pending' && permission.status !== 'closed') return item;
+      return { ...item, toastVisible: false, permission: { ...permission, status } };
+    })
+  };
+}
+
 export function expireNotification(
   state: WorkbenchState,
   notificationId: string
@@ -94,12 +130,15 @@ export function dismissNotification(
 ): WorkbenchState {
   return {
     ...state,
-    notifications: state.notifications.filter((item) => item.id !== notificationId)
+    notifications: state.notifications.flatMap((item) => {
+      if (item.id !== notificationId) return [item];
+      return item.permission?.status === 'pending' ? [{ ...item, toastVisible: false }] : [];
+    })
   };
 }
 
 export function clearNotifications(state: WorkbenchState): WorkbenchState {
-  return { ...state, notifications: [] };
+  return { ...state, notifications: state.notifications.filter((item) => item.permission?.status === 'pending') };
 }
 
 export function toggleNotificationCenter(state: WorkbenchState): WorkbenchState {

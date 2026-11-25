@@ -1,4 +1,5 @@
 import type { ComponentChildren } from 'preact';
+import type { PluginPermissionDecision } from '@learnlab/core-types';
 import { ActivityBar } from './ActivityBar';
 import { BottomPanel } from './BottomPanel';
 import { EditorGroup } from './EditorGroup';
@@ -36,6 +37,7 @@ interface AppShellProps {
   onExpireNotification: (id: string) => void;
   onDismissNotification: (id: string) => void;
   onClearNotifications: () => void;
+  onRespondToPermission: (requestId: string, decision: PluginPermissionDecision) => Promise<void>;
   onQuickOpen: () => void;
   onResizePrimary: (value: number) => void;
   onResizeAuxiliary: (value: number) => void;
@@ -121,6 +123,7 @@ export function AppShell(props: AppShellProps) {
         onExpire={props.onExpireNotification}
         onDismiss={props.onDismissNotification}
         onClear={props.onClearNotifications}
+        onRespondToPermission={props.onRespondToPermission}
       />
     </main>
   );

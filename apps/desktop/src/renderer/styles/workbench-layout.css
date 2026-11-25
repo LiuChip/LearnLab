@@ -883,6 +883,79 @@
   box-shadow: none;
 }
 
+.workbench-notification.is-permission-pending,
+.workbench-notification-center-item.is-permission-pending {
+  overflow: visible;
+}
+
+.workbench-notification-center-item.is-permission-pending {
+  grid-template-columns: 24px minmax(0, 1fr);
+  padding-right: 12px;
+}
+
+.workbench-notification-copy .workbench-permission-warning {
+  margin: 8px 0;
+  color: var(--workbench-font);
+  line-height: 1.5;
+}
+
+.workbench-permission-scope {
+  color: var(--workbench-muted);
+  font-size: 11px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.workbench-permission-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.workbench-shell .workbench-permission-actions > button,
+.workbench-shell .workbench-permission-allow {
+  min-height: 26px;
+  padding: 3px 10px;
+  border: 1px solid var(--workbench-strong-border);
+  border-radius: 3px;
+  font-size: 11px;
+}
+
+.workbench-shell .workbench-permission-allow,
+.workbench-shell .workbench-permission-allow:not(:disabled):hover {
+  color: #fff;
+  background: var(--workbench-accent-strong);
+}
+
+.workbench-permission-allow span {
+  margin-left: 4px;
+  padding-left: 6px;
+  border-left: 1px solid #ffffff55;
+}
+
+.workbench-permission-menu { position: relative; }
+
+.workbench-permission-options {
+  position: absolute;
+  z-index: 1;
+  right: 0;
+  bottom: calc(100% + 4px);
+  min-width: 120px;
+  padding: 4px;
+  border: 1px solid var(--workbench-strong-border);
+  border-radius: 3px;
+  background: var(--workbench-command);
+  box-shadow: 0 5px 16px var(--workbench-shadow);
+}
+
+.workbench-shell .workbench-permission-options button {
+  width: 100%;
+  padding: 6px 8px;
+  text-align: left;
+  font-size: 11px;
+}
+
 .workbench-quick-overlay {
   position: fixed;
   z-index: 100;

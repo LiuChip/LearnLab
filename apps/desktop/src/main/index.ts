@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain } from 'electron';
 import { join } from 'node:path';
 import { calculateContentFingerprint, loadPackage, readChapter } from '@learnlab/core';
 import { registerWorkspaceIpc } from './ipc/workspace.ipc';
@@ -21,6 +21,8 @@ let mainWindow: BrowserWindow | null = null;
 let appReady = false;
 let focusAfterReady = false;
 let windowCreation: Promise<void> | null = null;
+let stopExecutions: (() => Promise<boolean>) | undefined;
+let checkingQuit = false;
 
 function focusMainWindow(): void {
   if (!mainWindow || mainWindow.isDestroyed()) {
@@ -111,7 +113,7 @@ if (!gotSingleInstanceLock) {
     registerConfigIpc();
     registerPackageIpc();
     registerPluginIpc();
-    registerExecutionIpc();
+    stopExecutions = registerExecutionIpc();
 
     ensureMainWindow();
     app.on('activate', () => ensureMainWindow());
@@ -120,6 +122,23 @@ if (!gotSingleInstanceLock) {
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
+});
+
+app.on('before-quit', (event) => {
+  if (!stopExecutions) return;
+  event.preventDefault();
+  if (checkingQuit) return;
+  checkingQuit = true;
+  void stopExecutions().then((exited) => {
+    if (exited) {
+      stopExecutions = undefined;
+      app.quit();
+      return;
+    }
+    checkingQuit = false;
+    ensureMainWindow();
+    dialog.showErrorBox('无法退出 LearnLab', '未能确认实验进程已退出，请稍后重试。');
+  });
 });
 
 app.on('will-quit', () => {

@@ -171,6 +171,14 @@ export class WorkspaceManager {
     return withWorkspaceLock(workspaceDir, async () => withDatabase(workspaceDir, (db) => db.getPackage(packageId)));
   }
 
+  static async getSetting(workspaceDir: string, key: string): Promise<string | undefined> {
+    return withWorkspaceLock(workspaceDir, () => withDatabase(workspaceDir, (db) => db.getSetting(key)));
+  }
+
+  static async setSetting(workspaceDir: string, key: string, value: string): Promise<void> {
+    return withWorkspaceLock(workspaceDir, () => withDatabase(workspaceDir, (db) => db.setSetting(key, value)));
+  }
+
   static async importBundledDependency(workspaceDir: string, packageId: string, dependencyId: string, currentPlatform = process.platform, currentArch = process.arch): Promise<ImportDependencyResult> {
     return withWorkspaceLock(workspaceDir, async () => {
       await initWorkspaceUnlocked(workspaceDir);

@@ -5,9 +5,11 @@ import type { ExecutionPlan } from '@learnlab/core-types';
 const mocks = vi.hoisted(() => ({
   handle: vi.fn(),
   showMessageBox: vi.fn(),
-  host: { on: vi.fn(), start: vi.fn(), isRunning: vi.fn(), cancel: vi.fn() },
+  host: { on: vi.fn(), start: vi.fn(), isRunning: vi.fn(), cancel: vi.fn(), shutdown: vi.fn() },
   recordAttempt: vi.fn(),
-  prepare: vi.fn()
+  prepare: vi.fn(),
+  hasGrant: vi.fn(),
+  saveGrant: vi.fn()
 }));
 
 vi.mock('../apps/desktop/node_modules/electron', () => ({
@@ -24,6 +26,10 @@ vi.mock('../apps/desktop/src/main/ipc/security', () => ({
 }));
 vi.mock('../apps/desktop/src/main/services/experiment-launch', () => ({
   prepareExperimentLaunch: mocks.prepare
+}));
+vi.mock('../apps/desktop/src/main/services/plugin-grants', () => ({
+  hasPluginGrant: mocks.hasGrant,
+  savePluginGrant: mocks.saveGrant
 }));
 vi.mock('../apps/desktop/src/main/services/database', () => ({
   DesktopDatabaseService: { getPackageDb: vi.fn() }
@@ -59,11 +65,26 @@ function invoke(channel: string, sender: ReturnType<typeof createSender>, ...arg
 }
 
 const active = new Map<string, ExecutionPlan>();
+const preparedLaunch = {
+  entrypoint: '/plugins/test.js',
+  entrySource: Buffer.from('// authorized entry'),
+  grantKey: 'grant-test',
+  packageName: 'SQL',
+  pluginVersion: '1.0.0',
+  experimentTitle: 'Select',
+  permissions: { execute: ['plugin.run'] },
+  resources: {}
+};
+const preparedResult = { ok: true, value: preparedLaunch };
+let stopExecutions: ReturnType<typeof registerExecutionIpc>;
 
 beforeEach(() => {
   vi.resetAllMocks();
   active.clear();
-  mocks.prepare.mockResolvedValue({ ok: true, value: '/plugins/test.js' });
+  mocks.prepare.mockResolvedValue(preparedResult);
+  mocks.hasGrant.mockResolvedValue(true);
+  mocks.saveGrant.mockResolvedValue(undefined);
+  mocks.host.shutdown.mockResolvedValue(true);
   mocks.host.isRunning.mockImplementation((id) => active.has(id));
   mocks.host.start.mockImplementation((executionPlan: ExecutionPlan) => {
     active.set(executionPlan.executionId, executionPlan);
@@ -80,7 +101,7 @@ beforeEach(() => {
     }
     return true;
   });
-  registerExecutionIpc();
+  stopExecutions = registerExecutionIpc();
 });
 
 describe('experiment tab close IPC', () => {
@@ -164,7 +185,7 @@ describe('experiment tab close IPC', () => {
     const owner = createSender();
     let prepared!: () => void;
     mocks.prepare.mockReturnValue(new Promise((resolve) => {
-      prepared = () => resolve({ ok: true, value: '/plugins/test.js' });
+      prepared = () => resolve(preparedResult);
     }));
     const start = invoke('execution:start', owner, plan);
     expect(await invoke('execution:start', owner, { ...plan, executionId: 'concurrent' })).toMatchObject({ ok: false });
@@ -172,6 +193,98 @@ describe('experiment tab close IPC', () => {
     prepared();
     expect(await start).toMatchObject({ ok: false, error: { type: 'execution_cancelled' } });
     expect(mocks.showMessageBox).not.toHaveBeenCalled();
+    expect(mocks.host.start).not.toHaveBeenCalled();
+  });
+
+  it('waits for the owning window to explicitly allow execution', async () => {
+    mocks.hasGrant.mockResolvedValue(false);
+    const owner = createSender();
+    const start = invoke('execution:start', owner, plan);
+    await vi.waitFor(() => expect(owner.send).toHaveBeenCalledWith(
+      'execution:permission-request', expect.objectContaining({ pluginId: plan.pluginId })
+    ));
+    const request = owner.send.mock.calls[0][1];
+    expect(mocks.host.start).not.toHaveBeenCalled();
+    expect(await invoke('execution:respond-permission', createSender(), request.requestId, 'once')).toBe(false);
+    expect(await invoke('execution:respond-permission', owner, request.requestId, 'once')).toBe(true);
+    expect(await start).toMatchObject({ ok: true });
+    expect(mocks.saveGrant).not.toHaveBeenCalled();
+    expect(mocks.host.start).toHaveBeenCalledWith(
+      expect.objectContaining(plan), preparedLaunch.entrypoint, preparedLaunch.entrySource, preparedLaunch.resources
+    );
+  });
+
+  it('persists an always decision only after revalidating the same installation', async () => {
+    mocks.hasGrant.mockResolvedValue(false);
+    const owner = createSender();
+    const start = invoke('execution:start', owner, plan);
+    await vi.waitFor(() => expect(owner.send).toHaveBeenCalledOnce());
+    const request = owner.send.mock.calls[0][1];
+    expect(await invoke('execution:respond-permission', owner, request.requestId, 'always')).toBe(true);
+    expect(await invoke('execution:respond-permission', owner, request.requestId, 'always')).toBe(false);
+    expect(await start).toMatchObject({ ok: true });
+    expect(mocks.prepare).toHaveBeenCalledTimes(2);
+    expect(mocks.saveGrant).toHaveBeenCalledWith(preparedLaunch.grantKey);
+  });
+
+  it('requires a fresh grant if the installation changes while the notification is open', async () => {
+    mocks.hasGrant.mockResolvedValue(false);
+    const owner = createSender();
+    const start = invoke('execution:start', owner, plan);
+    await vi.waitFor(() => expect(owner.send).toHaveBeenCalledOnce());
+    mocks.prepare.mockResolvedValue({ ok: true, value: { ...preparedLaunch, grantKey: 'changed' } });
+    const request = owner.send.mock.calls[0][1];
+    await invoke('execution:respond-permission', owner, request.requestId, 'always');
+    expect(await start).toMatchObject({ ok: false, error: { type: 'permission_unavailable' } });
+    expect(mocks.saveGrant).not.toHaveBeenCalled();
+    expect(mocks.host.start).not.toHaveBeenCalled();
+  });
+
+  it.each(['render-process-gone', 'did-start-navigation'])('withdraws permission on %s', async (event) => {
+    mocks.hasGrant.mockResolvedValue(false);
+    const owner = createSender();
+    const start = invoke('execution:start', owner, plan);
+    await vi.waitFor(() => expect(owner.send).toHaveBeenCalledOnce());
+    owner.emit(event, {}, 'file:///index.html', false, true);
+    expect(await start).toMatchObject({ ok: false, error: { type: 'execution_cancelled' } });
+    expect(mocks.host.start).not.toHaveBeenCalled();
+  });
+
+  it('waits for an in-flight durable grant write when quitting without starting the plugin', async () => {
+    mocks.hasGrant.mockResolvedValue(false);
+    let finishWrite!: () => void;
+    mocks.saveGrant.mockReturnValue(new Promise<void>((resolve) => { finishWrite = resolve; }));
+    const owner = createSender();
+    const start = invoke('execution:start', owner, plan);
+    await vi.waitFor(() => expect(owner.send).toHaveBeenCalledOnce());
+    const request = owner.send.mock.calls[0][1];
+    await invoke('execution:respond-permission', owner, request.requestId, 'always');
+    await vi.waitFor(() => expect(mocks.saveGrant).toHaveBeenCalledOnce());
+
+    const quitFinished = vi.fn();
+    const quit = stopExecutions().then(quitFinished);
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(quitFinished).not.toHaveBeenCalled();
+    finishWrite();
+    await quit;
+    expect(quitFinished).toHaveBeenCalledWith(true);
+    expect(await start).toMatchObject({ ok: false, error: { type: 'execution_cancelled' } });
+    expect(mocks.host.start).not.toHaveBeenCalled();
+  });
+
+  it.each(['denied', 'close'] as const)('withdraws an unauthorized launch on %s', async (action) => {
+    mocks.hasGrant.mockResolvedValue(false);
+    const owner = createSender();
+    const start = invoke('execution:start', owner, plan);
+    await vi.waitFor(() => expect(owner.send).toHaveBeenCalledOnce());
+    const request = owner.send.mock.calls[0][1];
+    if (action === 'denied') {
+      expect(await invoke('execution:respond-permission', owner, request.requestId, 'denied')).toBe(true);
+    } else {
+      expect(await invoke('execution:confirm-close', owner, packageDir, plan.labId)).toEqual({ status: 'close' });
+    }
+    expect(await start).toMatchObject({ ok: false });
+    expect(owner.send).toHaveBeenCalledWith('execution:permission-closed', request.requestId);
     expect(mocks.host.start).not.toHaveBeenCalled();
   });
 });
