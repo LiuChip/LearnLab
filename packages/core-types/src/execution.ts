@@ -62,3 +62,7 @@ export interface ExecutionCompleteEvent {
   /** Human-readable error or verdict reason. */
   reason?: string;
 }
+
+export type ExperimentCloseResult =
+  | { status: 'close' | 'cancelled' }
+  | { status: 'failed'; reason: string };

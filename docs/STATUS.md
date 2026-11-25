@@ -1,6 +1,6 @@
 # 文档状态与冲突清单
 
-> 文档同步日期：2026-10-12；实现与测试基线核对于 2026-10-01。本文是**文档阅读导航与实现核对**；设计目标与已交付能力分别标注。所述测试基线来自当日工作树，不代表发布包验收。
+> 最近核对日期为 2026-11-25。本文记录当前代码、设计与验证状态。
 
 ## 如何阅读这套文档
 
@@ -9,17 +9,17 @@
 3. [架构](ARCHITECTURE.md)、[UI 设计](UI_DESIGN.md)、[数据模型](DATA_MODEL.md)和[安全设计](SECURITY.md)描述目标方案。出现“将”“应”“MVP”时，不自动表示代码已实现。
 4. [API 总表](API_REFERENCE.md)与源码用于核对当前可调用接口。日期更早的评估、规格、计划和评审保留为历史证据。
 
-根目录 `Plan.md`、`UNFREEZE.md`、`ICON.md` 是被 `.gitignore` 排除的**本地工作台账**，公开仓库的读者可能无法取得；本文和公开路线图提供必要的状态摘要。工作树中未提交的 `ARCHITECTURE.md`、`UI_DESIGN.md` 编辑包含 2026-09-30 至 10-01 的较新决定，本次整理保留了它们。设计发生变化时，先核实源码，再更新相关专题、本文、路线图和 README。
+根目录 `Plan.md`、`UNFREEZE.md`、`ICON.md` 是本地台账。公开状态以本文和路线图为准。
 
 ## 当前实现快照
 
 | 领域       | 已实现或已验证                                                                          | 仍需完成                                                                |
 | ---------- | --------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
-| 桌面阅读   | Electron/Preact 工作台；默认学习区已登记包列表；目录型包、章节 Markdown、标签和阅读进度；最小阅读会话恢复（上次打开的包 + 章节，存入 `workspace_settings`） | 界面包导入/学习区切换、作者包图标声明与安全加载、首次使用路径、完整视觉验收 |
+| 桌面阅读 | 默认学习区的目录导入、开发环境示例导入、目录型包 Markdown 阅读、最小会话恢复与章节滚动进度 | 学习区创建/切换界面、作者包图标加载与视觉验收 |
 | 搜索       | 当前文件查找（定位、高亮、上/下跳转，纯函数位于 `packages/markdown/src/find.ts`）；核心遍历式学习区搜索保留为内部能力 | 包/学习区范围暂不可选；替换写入未开放 |
-| 插件与环境 | manifest/注册表/依赖解析、实验性上下文和纯逻辑权限求交；依赖安全导入与记录；ExecutionPlan 类型与验证、PluginHostService 子进程管理、execution:start/cancel/is-running IPC、preload bridge、ExperimentView 运行/取消 UI | 真正的插件代码宿主授权弹窗、运行时授权持久化、MySQL 插件与判定器、实验历史自动写入 |
-| 数据与工具 | 配置 JSON 导入导出、阅读进度、实验历史存储模块、数据库迁移；LabKit 校验/预览模块；实验历史读取 UI（筛选/展开/损坏记录处理）；`workspace_settings` 读写 IPC | LabKit CLI/pack、`.labpkg` 归档导入、仓库下载器；实验历史写入（依赖 M3 插件宿主） |
-| 质量       | 当前工作树 `pnpm test:run`：31 个文件、158 项测试；`typecheck`、`lint`、`build` 通过    | Electron 安装包、真实实验端到端、跨平台进程回收与视觉验收               |
+| 插件与环境 | 清单解析、依赖求解、纯逻辑权限求交、内部子进程宿主与实验标签关闭确认 | 运行时授权、官方 MySQL 插件、Windows 进程树回收和跨平台验收 |
+| 数据与工具 | 进度与会话设置、实验历史自动记录与查看、数据库迁移、LabKit 内部校验与预览 | 完整运行日志、手动判定、LabKit CLI/pack、归档导入及下载器 |
+| 质量 | Vitest、类型检查、lint 与开发构建纳入 CI | 真实 Electron 交互、安装包与跨平台验收 |
 
 `workspace.db`/`package.db` 是逻辑名称。新建持久文件目前默认使用便携 JSON driver；已有 SQLite 文件仅在运行时支持 `node:sqlite` 时打开。详见[数据模型](DATA_MODEL.md)。
 
@@ -44,8 +44,8 @@
 | 主题             | 冲突证据                                                                                                                                | 当前结论与后续动作                                                                           |
 | ---------------- | --------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
 | 学习区目录边界 | 旧实现可登记软连接与区外包，`workspace-db.ts` 保留 `links`/目标路径字段 | 2026-11-23：`registerPackage` 只接受学习区内真实目录（返回 `outside_workspace`/`symlink_not_allowed`），区外来源经 `importPackageIntoWorkspace` 复制后登记；旧数据库字段仅作兼容保留 |
-| 搜索范围         | 本次整理前的路线图、测试策略及数据模型要求 MVP 工作区全文索引；较新的[UI 设计](UI_DESIGN.md)限定当前文件查找，renderer 仍调用工作区搜索 | 本次已统一活跃文档；核心遍历搜索保留，renderer 的范围/定位修改列入 M1；索引只是未来可选缓存  |
-| 实验入口与运行态 | 旧测试路径写“开始实验”，最新[架构](ARCHITECTURE.md)与[UI 设计](UI_DESIGN.md)定义卡片“打开实验”仅开标签，且不展示全局运行态              | M2/M3 分开实现打开、执行、判定和标签关闭守卫；每次尝试的持久结果不等于全局运行状态           |
+| 搜索范围 | 早期方案采用遍历式学习区搜索 | renderer 提供当前文件查找与高亮。跨文件遍历保留为内部能力 |
+| 实验入口与运行态 | 早期测试路径将打开实验视为开始运行 | 侧栏可打开实验标签。运行、关闭确认和历史记录发生于实验标签及宿主生命周期内 |
 | 存储/技术栈      | 本次整理前的总设计和架构技术表笼统称 SQLite、markdown-it、electron-builder；实际依赖与[数据模型](DATA_MODEL.md)不同                     | 活跃文档已改为实际使用的 Electron/Preact、unified/remark/rehype、便携 driver；未装库只列候选 |
 | 包和作者工具     | 早期架构稿叙述 `.labpkg` 双击导入、LabKit CLI/GUI；当前 loader 只读取目录、`pack` 未实现且无 CLI                                        | 目录型包为现状；归档与工具命令进入 M5，GUI 作者工具另行评估                                  |
 | Markdown 能力    | 本次整理前的安全文档称可渲染原始 HTML 和嵌入资源；当前解析经 `rehype-sanitize`，没有 raw HTML 解析                                      | 当前仅声明基本 Markdown/GFM 与安全 HTML 输出；媒体、公式和扩展容器需单独实现与验证           |
@@ -65,8 +65,8 @@
 
 ## 本次实现核验依据
 
-- 正式桌面版读取默认学习区和已登记包：[App.tsx](../apps/desktop/src/renderer/App.tsx)；当前包列表只有选择入口：[WorkspacePackageList.tsx](../apps/desktop/src/renderer/components/navigation/WorkspacePackageList.tsx)。
-- 当前搜索由核心遍历实现：[search.ts](../packages/core/src/search.ts)；renderer 的搜索入口仍调用学习区范围：[readingStore.ts](../apps/desktop/src/renderer/stores/readingStore.ts)、[SearchReplaceView.tsx](../apps/desktop/src/renderer/components/navigation/SearchReplaceView.tsx)。
-- 实验视图仍是占位：[ExperimentList.tsx](../apps/desktop/src/renderer/components/navigation/ExperimentList.tsx)；LabKit 的打包未实现：[pack.ts](../tools/labkit/src/pack.ts)；当前插件开发边界见[插件开发文档](PLUGIN_DEVELOPMENT.md)。
+- 桌面版读取默认学习区，支持系统目录选择和开发样例导入。[App.tsx](../apps/desktop/src/renderer/App.tsx) · [WorkspacePackageList.tsx](../apps/desktop/src/renderer/components/navigation/WorkspacePackageList.tsx)
+- 桌面查找匹配和高亮当前章节。核心保留遍历能力。[find.ts](../packages/markdown/src/find.ts) · [search.ts](../packages/core/src/search.ts)
+- 实验标签支持说明、提示和历史。内部宿主可启动测试夹具并记录完成事件。LabKit 打包待实现。[ExperimentView.tsx](../apps/desktop/src/renderer/components/content/ExperimentView.tsx) · [execution.ipc.ts](../apps/desktop/src/main/ipc/execution.ipc.ts) · [pack.ts](../tools/labkit/src/pack.ts)
 - 实际持久化路径分别由 [workspace-db.ts](../packages/core/src/database/workspace-db.ts)、[package-db.ts](../packages/core/src/database/package-db.ts)、[experiment-history.ts](../packages/core/src/experiment-history.ts) 决定；默认 driver 行为见[driver.ts](../packages/core/src/database/driver.ts)。
 - Markdown 管线见[engine.ts](../packages/markdown/src/engine.ts)；当前第三方搜索图标归属见[版权说明](../THIRD_PARTY_NOTICES.md)。

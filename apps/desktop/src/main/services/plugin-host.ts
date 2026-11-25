@@ -1,5 +1,7 @@
-import { spawn, type ChildProcess } from 'node:child_process';
+import { execFile, spawn, type ChildProcess } from 'node:child_process';
 import { EventEmitter } from 'node:events';
+import { setTimeout as delay } from 'node:timers/promises';
+import { promisify } from 'node:util';
 import type {
   ExecutionCompleteEvent,
   ExecutionOutputEvent,
@@ -7,13 +9,27 @@ import type {
 } from '@learnlab/core-types';
 import { buildPluginEnv } from '@learnlab/core';
 
+const TERM_GRACE_MS = 500;
+const KILL_GRACE_MS = 1000;
+const EXIT_POLL_MS = 20;
+const EXIT_RECHECK_MS = 250;
+const OUTPUT_DRAIN_MS = 25;
+const execFileAsync = promisify(execFile);
+
+type ExecutionOutcome = Pick<ExecutionCompleteEvent, 'status' | 'exitCode' | 'durationMs' | 'reason'>;
+
 interface ActiveExecution {
   plan: ExecutionPlan;
   process: ChildProcess;
+  groupId: number | undefined;
+  exited: boolean;
+  draining: boolean;
   startedAt: number;
   timeoutHandle: ReturnType<typeof setTimeout>;
   stdout: string[];
-  stderr: string[];
+  outcome?: ExecutionOutcome;
+  cleanup?: Promise<boolean>;
+  exitRecheck?: ReturnType<typeof setTimeout>;
 }
 
 export type PluginHostEvent =
@@ -36,43 +52,42 @@ export class PluginHostService extends EventEmitter {
   start(plan: ExecutionPlan, pluginEntrypoint: string): void {
     if (this.active.has(plan.executionId)) return;
 
-    const env = buildPluginEnv(plan.packageDir, plan);
+    const ownsGroup = process.platform !== 'win32';
     const child = spawn(process.execPath, [pluginEntrypoint], {
       cwd: plan.packageDir,
-      env,
+      env: { ...buildPluginEnv(plan.packageDir, plan), ELECTRON_RUN_AS_NODE: '1' },
       stdio: ['ignore', 'pipe', 'pipe'],
-      // Spawn in a new process group so we can kill the whole tree on timeout/cancel
-      detached: false
+      // POSIX detached children lead a new process group. Windows tracks only the child.
+      detached: ownsGroup
     });
 
     let stdoutBytes = 0;
     let stderrBytes = 0;
-    const stdoutChunks: string[] = [];
-    const stderrChunks: string[] = [];
 
     const timeoutMs = plan.timeoutMs ?? 30_000;
-    const timeoutHandle = setTimeout(() => {
-      this._finish(plan.executionId, 'timeout');
-    }, timeoutMs);
-
     const execution: ActiveExecution = {
       plan,
       process: child,
+      groupId: ownsGroup ? child.pid : undefined,
+      exited: false,
+      draining: false,
       startedAt: Date.now(),
-      timeoutHandle,
-      stdout: stdoutChunks,
-      stderr: stderrChunks
+      timeoutHandle: setTimeout(() => {
+        void this.finish(execution, 'timeout', undefined, `超时（${timeoutMs} ms）`);
+      }, timeoutMs),
+      stdout: []
     };
     this.active.set(plan.executionId, execution);
 
     child.stdout?.on('data', (chunk: Buffer) => {
+      if (execution.outcome && !execution.draining) return;
       const text = chunk.toString('utf8');
       stdoutBytes += Buffer.byteLength(text);
       if (stdoutBytes > this.MAX_OUTPUT_BYTES) {
-        this._finish(plan.executionId, 'failed', undefined, '输出超过大小限制（256 KB）');
+        void this.finish(execution, 'failed', undefined, '输出超过大小限制（256 KB）');
         return;
       }
-      stdoutChunks.push(text);
+      execution.stdout.push(text);
       this.emit('event', {
         type: 'output',
         data: { executionId: plan.executionId, channel: 'stdout', text }
@@ -80,10 +95,10 @@ export class PluginHostService extends EventEmitter {
     });
 
     child.stderr?.on('data', (chunk: Buffer) => {
+      if (execution.outcome && !execution.draining) return;
       const text = chunk.toString('utf8');
       stderrBytes += Buffer.byteLength(text);
       if (stderrBytes > this.MAX_OUTPUT_BYTES) return; // just drop excess stderr
-      stderrChunks.push(text);
       this.emit('event', {
         type: 'output',
         data: { executionId: plan.executionId, channel: 'stderr', text }
@@ -91,19 +106,31 @@ export class PluginHostService extends EventEmitter {
     });
 
     child.on('error', (err) => {
-      this._finish(plan.executionId, 'failed', undefined, err.message);
+      if (!execution.outcome) void this.finish(execution, 'failed', undefined, err.message);
     });
 
-    child.on('close', (code) => {
-      if (!this.active.has(plan.executionId)) return; // already finished
-      const status = code === 0 ? 'passed' : 'failed';
-      this._finish(plan.executionId, status, code ?? undefined);
+    child.once('exit', (code) => {
+      execution.exited = true;
+      execution.draining = !execution.outcome;
+      this.recordOutcome(execution, code === 0 ? 'passed' : 'failed', code ?? undefined);
+      // Descendants can keep the inherited pipes open after the child exits.
+      void this.cleanup(execution);
+    });
+
+    child.once('close', (code) => {
+      execution.draining = false;
+      this.recordOutcome(execution, code === 0 ? 'passed' : 'failed', code ?? undefined);
+      if (!execution.exited) {
+        // A spawn failure closes the streams without an exit event.
+        execution.exited = true;
+        void this.cleanup(execution);
+      }
     });
   }
 
-  cancel(executionId: string): void {
-    if (!this.active.has(executionId)) return;
-    this._finish(executionId, 'cancelled');
+  cancel(executionId: string): Promise<boolean> {
+    const execution = this.active.get(executionId);
+    return execution ? this.finish(execution, 'cancelled') : Promise.resolve(true);
   }
 
   isRunning(executionId: string): boolean {
@@ -111,39 +138,125 @@ export class PluginHostService extends EventEmitter {
   }
 
   cancelAllForPackage(packageDir: string): void {
-    for (const [id, execution] of this.active) {
+    for (const execution of this.active.values()) {
       if (execution.plan.packageDir === packageDir) {
-        this._finish(id, 'cancelled');
+        void this.finish(execution, 'cancelled');
       }
     }
   }
 
-  private _finish(
-    executionId: string,
+  private finish(
+    execution: ActiveExecution,
     status: ExecutionCompleteEvent['status'],
     exitCode?: number,
     reason?: string
-  ): void {
-    const execution = this.active.get(executionId);
-    if (!execution) return;
+  ): Promise<boolean> {
+    this.recordOutcome(execution, status, exitCode, reason);
+    return this.cleanup(execution);
+  }
 
+  private recordOutcome(
+    execution: ActiveExecution,
+    status: ExecutionCompleteEvent['status'],
+    exitCode?: number,
+    reason?: string
+  ): ExecutionOutcome {
+    return execution.outcome ??= { status, exitCode, reason, durationMs: Date.now() - execution.startedAt };
+  }
+
+  private cleanup(execution: ActiveExecution): Promise<boolean> {
+    if (execution.cleanup) return execution.cleanup;
     clearTimeout(execution.timeoutHandle);
-    this.active.delete(executionId);
+    clearTimeout(execution.exitRecheck);
+    // Assign the shared promise before signaling, which can trigger child events.
+    execution.cleanup = Promise.resolve().then(async () => {
+      if (!(await this.terminate(execution))) {
+        execution.cleanup = undefined;
+        this.recheckExit(execution);
+        return false;
+      }
+      await this.complete(execution);
+      return true;
+    });
+    return execution.cleanup;
+  }
 
-    // Kill the process if still alive
-    if (!execution.process.killed) {
-      try {
-        execution.process.kill('SIGTERM');
-        // On macOS/Linux give it a moment, then SIGKILL
-        setTimeout(() => {
-          if (!execution.process.killed) {
-            try { execution.process.kill('SIGKILL'); } catch { /* already dead */ }
-          }
-        }, 1500);
-      } catch { /* already dead */ }
+  private async terminate(execution: ActiveExecution): Promise<boolean> {
+    if (this.hasExited(execution)) return true;
+    this.signal(execution, 'SIGTERM');
+    if (await this.waitForExit(execution, TERM_GRACE_MS)) return true;
+    this.signal(execution, 'SIGKILL');
+    return await this.waitForExit(execution, KILL_GRACE_MS) || await this.linuxGroupHasNoLiveMembers(execution);
+  }
+
+  private async waitForExit(execution: ActiveExecution, graceMs: number): Promise<boolean> {
+    const deadline = performance.now() + graceMs;
+    while (!this.hasExited(execution)) {
+      const remaining = deadline - performance.now();
+      if (remaining <= 0) return false;
+      await delay(Math.min(remaining, EXIT_POLL_MS));
     }
+    return true;
+  }
 
-    const durationMs = Date.now() - execution.startedAt;
+  private hasExited(execution: ActiveExecution): boolean {
+    if (execution.groupId !== undefined) this.signal(execution, 0);
+    return execution.exited && execution.groupId === undefined;
+  }
+
+  private async linuxGroupHasNoLiveMembers(execution: ActiveExecution): Promise<boolean> {
+    const { groupId } = execution;
+    if (process.platform !== 'linux' || groupId === undefined || !execution.exited) return false;
+    try {
+      // A zombie retains its group ID until its parent reaps it, but cannot execute.
+      const { stdout } = await execFileAsync('/bin/ps', ['-eo', 'pgid=,stat='], { timeout: 500 });
+      const hasLiveMembers = stdout.trim().split('\n').some((line) => {
+        const [id, state] = line.trim().split(/\s+/);
+        return Number(id) === groupId && !state?.startsWith('Z');
+      });
+      if (hasLiveMembers) return false;
+      execution.groupId = undefined;
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  private signal(execution: ActiveExecution, signal: NodeJS.Signals | 0): void {
+    if (execution.groupId !== undefined) {
+      try {
+        process.kill(-execution.groupId, signal);
+      } catch (error) {
+        // Once a group disappears, never signal the same numeric ID again.
+        if ((error as NodeJS.ErrnoException).code === 'ESRCH') execution.groupId = undefined;
+      }
+    } else if (process.platform === 'win32' && signal !== 0 && !execution.exited) {
+      try {
+        execution.process.kill(signal);
+      } catch {
+        // The exit event still determines whether cleanup succeeded.
+      }
+    }
+  }
+
+  private recheckExit(execution: ActiveExecution): void {
+    execution.exitRecheck = setTimeout(() => {
+      if (this.hasExited(execution)) void this.cleanup(execution);
+      else this.recheckExit(execution);
+    }, EXIT_RECHECK_MS).unref();
+  }
+
+  private async complete(execution: ActiveExecution): Promise<void> {
+    // Give queued output a chance to drain on normal exit. A process outside
+    // the owned group could still hold a pipe open, so the wait is bounded.
+    if (execution.draining) await delay(OUTPUT_DRAIN_MS);
+    const exitCode = execution.process.exitCode;
+    const outcome = this.recordOutcome(execution, exitCode === 0 ? 'passed' : 'failed', exitCode ?? undefined);
+    execution.process.stdout?.destroy();
+    execution.process.stderr?.destroy();
+
+    const executionId = execution.plan.executionId;
+    this.active.delete(executionId);
 
     // Try to parse structured JSON result from stdout (last line)
     let steps: ExecutionCompleteEvent['steps'];
@@ -157,11 +270,8 @@ export class PluginHostService extends EventEmitter {
 
     const complete: ExecutionCompleteEvent = {
       executionId,
-      status,
-      exitCode,
-      durationMs,
-      steps,
-      reason: reason ?? (status === 'timeout' ? `超时（${execution.plan.timeoutMs ?? 30_000} ms）` : undefined)
+      ...outcome,
+      steps
     };
 
     this.emit('event', { type: 'complete', data: complete, plan: execution.plan } satisfies PluginHostEvent);

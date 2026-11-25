@@ -17,8 +17,9 @@ LearnLab currently implements plugin manifest parsing, a local installed-plugin
 registry, dependency resolution, renderer host queries, minimal experimental
 context types, and a pure-logic permission resolver.
 
-It does not yet load or execute plugin code. The context types and permission
-resolver are not runtime authorization mechanisms and are not a stable SDK.
+The desktop has an internal child-process execution path for local fixtures.
+Runtime authorization and the official plugin implementations are pending.
+The context types and permission resolver remain experimental.
 
 Planned settings UI (`not-available`): when a plugin registers settings, the
 settings window's left category list should display that plugin's name and
